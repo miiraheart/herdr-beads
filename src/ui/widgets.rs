@@ -8,7 +8,7 @@ use crate::ui::theme;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
 use ratatui::Frame;
 
 pub fn truncate(s: &str, w: usize) -> String {
@@ -133,7 +133,6 @@ pub fn render_input(f: &mut Frame, area: Rect, app: &App) {
         w,
         3,
     );
-    f.render_widget(Clear, rect);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -153,7 +152,6 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
         F_ASSIGNEE, F_BACKLOG, F_DESC, F_EPIC, F_LABELS, F_PRIORITY, F_TITLE, F_TYPE,
     };
     let rect = centered_rect(68, 84, area);
-    f.render_widget(Clear, rect);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -267,7 +265,6 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
 
 pub fn render_help(f: &mut Frame, area: Rect) {
     let rect = centered_rect(70, 80, area);
-    f.render_widget(Clear, rect);
     let mut lines: Vec<Line> = vec![
         Line::from(Span::styled(
             "herdr-beads - keys",
