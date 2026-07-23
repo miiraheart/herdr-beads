@@ -70,7 +70,9 @@ impl CreateForm {
             "No epic".to_string()
         } else {
             match self.epics.get(self.epic_idx - 1) {
-                Some((id, title)) => format!("{id} - {}", title.chars().take(28).collect::<String>()),
+                Some((id, title)) => {
+                    format!("{id} - {}", title.chars().take(28).collect::<String>())
+                }
                 None => "No epic".to_string(),
             }
         }

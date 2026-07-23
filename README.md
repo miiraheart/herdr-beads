@@ -1,5 +1,6 @@
 # herdr-beads
 
+[![ci](https://github.com/miiraheart/herdr-beads/actions/workflows/ci.yml/badge.svg)](https://github.com/miiraheart/herdr-beads/actions/workflows/ci.yml)
 ![Rust](https://img.shields.io/badge/rust-edition%202021-orange.svg)
 ![herdr 0.7+](https://img.shields.io/badge/herdr-0.7%2B-8a2be2)
 ![platforms: linux, macOS](https://img.shields.io/badge/platforms-linux%2C%20macOS-informational)

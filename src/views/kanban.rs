@@ -36,10 +36,12 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         };
         let hdr = Line::from(vec![
             Span::styled(format!(" {} ", status_label(status)), hdr_style),
-            Span::styled(format!(" {}", col_ids.len()), Style::default().fg(theme::OVERLAY0)),
+            Span::styled(
+                format!(" {}", col_ids.len()),
+                Style::default().fg(theme::OVERLAY0),
+            ),
         ]);
-        let vrects =
-            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(rect);
+        let vrects = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(rect);
         f.render_widget(
             Paragraph::new(hdr).style(Style::default().bg(Color::Reset)),
             vrects[0],

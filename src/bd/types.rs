@@ -31,13 +31,15 @@ pub struct Dependency {
 impl Dependency {
     /// The id of the other bead this edge points at, whichever shape we got.
     pub fn other_id(&self) -> Option<&str> {
-        self.depends_on_id
-            .as_deref()
-            .or(self.id.as_deref())
+        self.depends_on_id.as_deref().or(self.id.as_deref())
     }
 
     pub fn label(&self) -> String {
-        match (self.other_id(), self.title.as_deref(), self.dep_type.as_deref()) {
+        match (
+            self.other_id(),
+            self.title.as_deref(),
+            self.dep_type.as_deref(),
+        ) {
             (Some(id), Some(t), Some(k)) => format!("{k}: {id} - {t}"),
             (Some(id), Some(t), None) => format!("{id} - {t}"),
             (Some(id), None, Some(k)) => format!("{k}: {id}"),

@@ -89,8 +89,7 @@ impl App {
                     self.status_msg =
                         "global needs a shared-server bd DB (not configured) - g = repo".into();
                 } else {
-                    self.status_msg =
-                        format!("bd: {}", first.chars().take(90).collect::<String>());
+                    self.status_msg = format!("bd: {}", first.chars().take(90).collect::<String>());
                 }
                 self.beads = Vec::new();
             }
@@ -438,7 +437,11 @@ impl App {
         } else {
             String::new()
         };
-        self.input = Some(Input { kind, title, buffer });
+        self.input = Some(Input {
+            kind,
+            title,
+            buffer,
+        });
     }
 
     pub fn submit_input(&mut self) {

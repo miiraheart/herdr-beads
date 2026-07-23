@@ -74,8 +74,9 @@ fn resolve_repo_cwd() -> Option<String> {
         .filter(|p| p.get("pane_id").and_then(|x| x.as_str()).unwrap_or("") != me)
         .collect();
     let cwd = |p: &serde_json::Value| p.get("cwd").and_then(|x| x.as_str()).map(String::from);
-    let in_ws =
-        |p: &serde_json::Value| !ws.is_empty() && p.get("workspace_id").and_then(|x| x.as_str()) == Some(ws.as_str());
+    let in_ws = |p: &serde_json::Value| {
+        !ws.is_empty() && p.get("workspace_id").and_then(|x| x.as_str()) == Some(ws.as_str())
+    };
     let focused = |p: &serde_json::Value| p.get("focused").and_then(|x| x.as_bool()) == Some(true);
     let has_beads = |c: &str| std::path::Path::new(c).join(".beads").exists();
 
@@ -126,7 +127,12 @@ fn main() -> Result<()> {
     };
     enable_raw_mode()?;
     let mut out = io::stdout();
-    execute!(out, EnterAlternateScreen, EnableMouseCapture, SetTitle(pane_title))?;
+    execute!(
+        out,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        SetTitle(pane_title)
+    )?;
     let mut terminal = Terminal::new(CrosstermBackend::new(out))?;
 
     let res = run_app(&mut terminal, App::new(mode, scope));

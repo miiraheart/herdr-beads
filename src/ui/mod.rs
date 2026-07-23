@@ -34,8 +34,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     } else if want_detail {
         // narrow sidebar: detail below the list so it still fits
         let det_h = (body.height / 2).clamp(6, 18);
-        let stack =
-            Layout::vertical([Constraint::Min(3), Constraint::Length(det_h)]).split(body);
+        let stack = Layout::vertical([Constraint::Min(3), Constraint::Length(det_h)]).split(body);
         render_view(f, stack[0], app);
         views::detail::render_side(f, stack[1], app);
     } else {

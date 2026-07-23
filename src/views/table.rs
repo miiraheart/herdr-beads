@@ -54,7 +54,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
                 Style::default().fg(theme::OVERLAY1),
             ),
             Span::styled(
-                format!("{:<pri_w$} ", theme::priority_glyph(b.priority), pri_w = pri_w),
+                format!(
+                    "{:<pri_w$} ",
+                    theme::priority_glyph(b.priority),
+                    pri_w = pri_w
+                ),
                 Style::default().fg(theme::priority_color(b.priority)),
             ),
             Span::styled(
@@ -67,7 +71,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
                 Style::default().fg(theme::status_color(&b.status)),
             ),
             Span::styled(
-                format!("{:<type_w$} ", truncate(&b.issue_type, type_w), type_w = type_w),
+                format!(
+                    "{:<type_w$} ",
+                    truncate(&b.issue_type, type_w),
+                    type_w = type_w
+                ),
                 Style::default().fg(theme::SUBTEXT),
             ),
             Span::styled(

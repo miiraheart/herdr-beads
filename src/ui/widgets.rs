@@ -123,7 +123,9 @@ pub fn centered_rect(px: u16, py: u16, area: Rect) -> Rect {
 }
 
 pub fn render_input(f: &mut Frame, area: Rect, app: &App) {
-    let Some(inp) = app.input.as_ref() else { return };
+    let Some(inp) = app.input.as_ref() else {
+        return;
+    };
     let w = area.width.min(70);
     let rect = Rect::new(
         area.x + (area.width.saturating_sub(w)) / 2,
@@ -162,7 +164,9 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
     let cur = form.field;
     let label = |i: u8, name: &str| {
         let style = if i == cur {
-            Style::default().fg(theme::MAUVE).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme::MAUVE)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme::OVERLAY1)
         };
@@ -197,7 +201,9 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
             label(F_TYPE, "Type"),
             Span::styled(
                 format!("‹ {it} ›"),
-                Style::default().fg(theme::type_color(it)).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme::type_color(it))
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
@@ -228,7 +234,10 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
         ]),
         Line::from(vec![
             label(F_EPIC, "Parent epic"),
-            Span::styled(format!("‹ {} ›", form.epic_label()), Style::default().fg(epic_fg)),
+            Span::styled(
+                format!("‹ {} ›", form.epic_label()),
+                Style::default().fg(epic_fg),
+            ),
         ]),
         Line::from(vec![
             label(F_LABELS, "Labels"),
@@ -240,12 +249,18 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
             label(F_BACKLOG, "Backlog"),
             Span::styled(
                 format!("{check} start deferred  (Space)"),
-                Style::default().fg(if form.deferred { theme::YELLOW } else { theme::OVERLAY0 }),
+                Style::default().fg(if form.deferred {
+                    theme::YELLOW
+                } else {
+                    theme::OVERLAY0
+                }),
             ),
         ]),
     ];
     f.render_widget(
-        Paragraph::new(lines).block(block).wrap(Wrap { trim: false }),
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
         rect,
     );
 }
@@ -256,7 +271,9 @@ pub fn render_help(f: &mut Frame, area: Rect) {
     let mut lines: Vec<Line> = vec![
         Line::from(Span::styled(
             "herdr-beads - keys",
-            Style::default().fg(theme::MAUVE).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme::MAUVE)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::raw(""),
     ];

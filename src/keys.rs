@@ -3,9 +3,7 @@
 use crate::app::App;
 use crate::input::InputKind;
 use crate::model::View;
-use ratatui::crossterm::event::{
-    KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind,
-};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
 pub fn help_lines() -> Vec<(&'static str, &'static str)> {
@@ -23,7 +21,10 @@ pub fn help_lines() -> Vec<(&'static str, &'static str)> {
         ("p", "set priority (0-4)"),
         ("n", "add note (bd note)"),
         ("m", "add comment (bd comment)"),
-        ("a", "new bead form (Tab: field · ←→: type/priority · Enter: create)"),
+        (
+            "a",
+            "new bead form (Tab: field · ←→: type/priority · Enter: create)",
+        ),
         ("o", "table: cycle sort (status/priority/changed)"),
         ("/", "filter  (Esc clears it)"),
         ("g", "toggle scope repo ⇄ global"),
@@ -36,7 +37,10 @@ pub fn help_lines() -> Vec<(&'static str, &'static str)> {
 }
 
 fn hit(r: &Rect, col: u16, row: u16) -> bool {
-    col >= r.x && col < r.x.saturating_add(r.width) && row >= r.y && row < r.y.saturating_add(r.height)
+    col >= r.x
+        && col < r.x.saturating_add(r.width)
+        && row >= r.y
+        && row < r.y.saturating_add(r.height)
 }
 
 pub fn handle_mouse(app: &mut App, ev: MouseEvent) {

@@ -31,10 +31,7 @@ pub fn run(scope: Scope, args: &[&str]) -> Result<String> {
     let mut cmd = Command::new(resolve_bd());
     // Ensure Homebrew is on PATH even under herdr's minimal launch environment.
     if let Ok(path) = std::env::var("PATH") {
-        cmd.env(
-            "PATH",
-            format!("/opt/homebrew/bin:/usr/local/bin:{path}"),
-        );
+        cmd.env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{path}"));
     }
     if scope == Scope::Global {
         cmd.arg("--global");

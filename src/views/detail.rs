@@ -19,7 +19,9 @@ pub fn build_lines(b: &Bead) -> Vec<Line<'static>> {
     )));
     lines.push(Line::from(Span::styled(
         b.title.clone(),
-        Style::default().fg(theme::TEXT).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(theme::TEXT)
+            .add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::raw(""));
     lines.push(Line::from(vec![
