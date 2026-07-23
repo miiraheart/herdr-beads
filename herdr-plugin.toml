@@ -1,0 +1,55 @@
+# herdr-beads - a beads (bd) board for herdr.
+#
+# One Rust/ratatui binary, two surfaces:
+#   - a docked side panel (List-first)      -> [[panes]] dock  + open-dock.sh
+#   - a floating popup big board (Kanban)    -> [[panes]] board + open-board.sh
+# Both toggle List / Table / Kanban in-process. Data is your bd issues.
+
+id = "herdr-beads"
+name = "herdr-beads"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "A beads (bd) board for herdr: List / Table / Kanban over your bd issues, docked or floating."
+platforms = ["linux", "macos"]
+
+# Built at install time. (A prebuilt fetch-or-build script can replace this later;
+# building from source needs a Rust toolchain.)
+[[build]]
+command = ["cargo", "build", "--release"]
+
+# The docked side panel. The `./` is required: herdr resolves a pane command
+# through PATH, and a bare relative path fails even though cwd is the plugin root.
+[[panes]]
+id = "dock"
+title = "Beads"
+placement = "split"
+command = ["./target/release/herdr-beads", "--mode", "dock"]
+
+# The floating popup board.
+[[panes]]
+id = "board"
+title = "Beads Board"
+placement = "popup"
+command = ["./target/release/herdr-beads", "--mode", "popup"]
+
+# Toggle the docked panel on the LEFT edge (open / focus / close), herdr-sidebar
+# style: split then swap into the left slot.
+[[actions]]
+id = "open-dock"
+title = "Beads: toggle dock"
+contexts = ["workspace", "tab", "pane"]
+command = ["bash", "scripts/open-dock.sh"]
+
+# Open the floating board popup.
+[[actions]]
+id = "open-board"
+title = "Beads: open floating board"
+contexts = ["workspace", "tab", "pane"]
+command = ["bash", "scripts/open-board.sh"]
+
+# Close every beads pane so they respawn on the latest build after a rebuild.
+[[actions]]
+id = "redeploy"
+title = "Beads: redeploy panes"
+contexts = ["workspace"]
+command = ["bash", "scripts/redeploy.sh"]

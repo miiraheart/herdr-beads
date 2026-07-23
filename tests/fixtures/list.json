@@ -1,0 +1,5 @@
+[
+  {"id":"demo-1","title":"Add dark-mode toggle","description":"Respect prefers-color-scheme and persist the choice.","status":"open","priority":2,"issue_type":"feature","owner":"user@example.com","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z","dependencies":[{"issue_id":"demo-1","depends_on_id":"demo-2","type":"blocks","created_at":"2026-01-01T00:00:00Z"}],"dependency_count":1,"dependent_count":0,"comment_count":0},
+  {"id":"demo-2","title":"Design token pipeline","description":"Generate tokens for both themes.","status":"in_progress","priority":1,"issue_type":"epic","owner":"user@example.com","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-03T00:00:00Z","dependencies":[],"dependency_count":0,"dependent_count":1,"comment_count":2},
+  {"id":"demo-3","title":"Fix flaky navigation test","description":"Intermittent failure under load.","status":"blocked","priority":0,"issue_type":"bug","owner":"user@example.com","dependencies":[],"dependency_count":0,"dependent_count":0,"comment_count":0}
+]

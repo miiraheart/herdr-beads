@@ -1,0 +1,22 @@
+[package]
+name = "herdr-beads"
+version = "0.1.0"
+edition = "2021"
+description = "A beads (bd) board for herdr: kanban + list + table over your bd issues, docked or floating."
+license = "MIT"
+repository = "https://github.com/miiraheart/herdr-beads"
+
+[[bin]]
+name = "herdr-beads"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"
