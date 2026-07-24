@@ -41,6 +41,8 @@ pub struct App {
     pub input: Option<Input>,
     pub create_form: Option<CreateForm>,
     pub show_help: bool,
+    /// When true, digits 1-9 set the selected bead's status (see `pick_status`).
+    pub status_pick: bool,
     pub status_msg: String,
     pub should_quit: bool,
     pub hits: Hits,
@@ -65,6 +67,7 @@ impl App {
             input: None,
             create_form: None,
             show_help: false,
+            status_pick: false,
             status_msg: String::new(),
             should_quit: false,
             hits: Hits::default(),
@@ -351,6 +354,31 @@ impl App {
         self.with_selected(|id| bd::claim(scope, id), "claimed");
     }
 
+    /// Toggle this pane between docked and fullscreen via herdr's native zoom.
+    /// herdr owns the zoom state; we run it on the pane we live in (HERDR_PANE_ID),
+    /// falling back to the focused pane when the env var is absent.
+    pub fn toggle_zoom(&mut self) {
+        let bin = std::env::var("HERDR_BIN_PATH").unwrap_or_else(|_| "herdr".to_string());
+        let pane = std::env::var("HERDR_PANE_ID").unwrap_or_default();
+        let mut cmd = std::process::Command::new(&bin);
+        cmd.args(["pane", "zoom", "--toggle"]);
+        if pane.is_empty() {
+            cmd.arg("--current");
+        } else {
+            cmd.args(["--pane", &pane]);
+        }
+        // Silent on success (no status message); only surface real failures.
+        match cmd.output() {
+            Ok(o) if o.status.success() => {}
+            Ok(o) => {
+                let err = String::from_utf8_lossy(&o.stderr);
+                self.status_msg =
+                    format!("zoom: {}", err.trim().chars().take(80).collect::<String>());
+            }
+            Err(e) => self.status_msg = format!("zoom: {e}"),
+        }
+    }
+
     pub fn retag(&mut self, dir: i32) {
         let Some(id) = self.selected.clone() else {
             return;
@@ -390,6 +418,73 @@ impl App {
         self.create_form = Some(CreateForm::new(epics));
     }
 
+    /// Reopen the create form pre-filled from the selected bead to edit it.
+    /// Labels/parent aren't carried in the list JSON, so they start blank and
+    /// are only written back when set (an untouched field never wipes data).
+    pub fn open_edit_form(&mut self) {
+        let Some(b) = self.selected_bead().cloned() else {
+            return;
+        };
+        let epics: Vec<(String, String)> = self
+            .beads
+            .iter()
+            .filter(|e| e.issue_type == "epic" && !e.is_closed() && e.id != b.id)
+            .map(|e| (e.id.clone(), e.title.clone()))
+            .collect();
+        let mut f = CreateForm::new(epics);
+        f.title = b.title.clone();
+        f.description = b.description.clone();
+        f.assignee = b.owner.clone().unwrap_or_default();
+        f.type_idx = crate::form::TYPES
+            .iter()
+            .position(|t| *t == b.issue_type)
+            .unwrap_or(0);
+        f.priority = b.priority.min(4);
+        f.deferred = b.status == "deferred";
+        f.edit_id = Some(b.id.clone());
+        self.create_form = Some(f);
+    }
+
+    /// Set the selected bead's status to the n-th board status (status picker).
+    pub fn pick_status(&mut self, n: usize) {
+        self.status_pick = false;
+        let statuses = self.board_statuses();
+        let Some(status) = statuses.get(n).cloned() else {
+            return;
+        };
+        let Some(id) = self.selected.clone() else {
+            return;
+        };
+        match bd::set_status(self.scope, &id, &status) {
+            Ok(_) => {
+                self.status_msg = format!("-> {status}");
+                self.reload();
+            }
+            Err(e) => self.status_msg = format!("bd error: {e}"),
+        }
+    }
+
+    /// Focus the selected bead's status group: collapse every other group, or
+    /// expand all again when already focused. A no-op-friendly solo toggle.
+    pub fn focus_status(&mut self) {
+        let Some(cur) = self.selected_bead().map(|b| b.status.clone()) else {
+            return;
+        };
+        let all = self.board_statuses();
+        let others_collapsed = all
+            .iter()
+            .filter(|s| **s != cur)
+            .all(|s| self.collapsed.contains(s));
+        if others_collapsed {
+            self.collapsed.clear();
+            self.status_msg = "showing all".into();
+        } else {
+            self.collapsed = all.into_iter().filter(|s| s != &cur).collect();
+            self.status_msg = format!("focus {cur}");
+        }
+        self.ensure_selected();
+    }
+
     pub fn clear_filter(&mut self) {
         self.filter.clear();
         self.ensure_selected();
@@ -405,22 +500,32 @@ impl App {
             self.create_form = Some(f);
             return;
         }
-        let nb = bd::NewBead {
-            title: &title,
-            issue_type: f.issue_type(),
-            priority: f.priority,
-            description: f.description.trim(),
-            assignee: f.assignee.trim(),
-            parent: f.parent_id(),
-            labels: f.labels.trim(),
-            deferred: f.deferred,
+        // Scope `nb` (which borrows `f`) so it drops before we may move `f` back.
+        let result = {
+            let nb = bd::NewBead {
+                title: &title,
+                issue_type: f.issue_type(),
+                priority: f.priority,
+                description: f.description.trim(),
+                assignee: f.assignee.trim(),
+                parent: f.parent_id(),
+                labels: f.labels.trim(),
+                deferred: f.deferred,
+            };
+            match &f.edit_id {
+                Some(id) => bd::update_bead(self.scope, id, &nb).map(|_| format!("updated {id}")),
+                None => bd::create(self.scope, &nb).map(|_| format!("created {}", f.issue_type())),
+            }
         };
-        match bd::create(self.scope, &nb) {
-            Ok(_) => {
-                self.status_msg = format!("created {}", f.issue_type());
+        match result {
+            Ok(msg) => {
+                self.status_msg = msg;
                 self.reload();
             }
-            Err(e) => self.status_msg = format!("bd error: {e}"),
+            Err(e) => {
+                self.status_msg = format!("bd error: {e}");
+                self.create_form = Some(f);
+            }
         }
     }
 

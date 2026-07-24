@@ -12,7 +12,15 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 pub fn bead_line(b: &Bead, width: u16) -> Line<'static> {
-    let title_w = (width as usize).saturating_sub(26).max(6);
+    // Fixed prefix before the title: "  " (2) + "P0 " (3) + type+space (2)
+    // + "{id:<13} " (14) = 21 cols. Reserve the " ⛓N" suffix only when the
+    // bead actually carries deps (chain glyph renders 2 cells).
+    let dep_w = if b.dependency_count > 0 {
+        3 + b.dependency_count.to_string().len()
+    } else {
+        0
+    };
+    let title_w = (width as usize).saturating_sub(21 + dep_w).max(6);
     let mut spans = vec![
         Span::raw("  "),
         Span::styled(

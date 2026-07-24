@@ -31,6 +31,8 @@ pub struct CreateForm {
     pub field: u8,
     /// (id, title) of epics available as a parent.
     pub epics: Vec<(String, String)>,
+    /// Some(id) when the form edits an existing bead; None for a new bead.
+    pub edit_id: Option<String>,
 }
 
 impl CreateForm {
@@ -46,6 +48,7 @@ impl CreateForm {
             deferred: false,
             field: F_TITLE,
             epics,
+            edit_id: None,
         }
     }
 
@@ -131,10 +134,8 @@ impl CreateForm {
                     }
                 }
             }
-            F_BACKLOG => {
-                if c == ' ' {
-                    self.deferred = !self.deferred;
-                }
+            F_BACKLOG if c == ' ' => {
+                self.deferred = !self.deferred;
             }
             _ => {}
         }

@@ -158,6 +158,45 @@ pub fn create(scope: Scope, nb: &NewBead) -> Result<String> {
     Ok(id)
 }
 
+/// Update an existing bead's core fields from an edited form. Optional fields
+/// (description/assignee/parent/labels) are only written when non-empty so an
+/// untouched field never wipes existing data. Status is left alone unless the
+/// backlog toggle is on.
+pub fn update_bead(scope: Scope, id: &str, nb: &NewBead) -> Result<()> {
+    let p = nb.priority.to_string();
+    let mut args: Vec<&str> = vec![
+        "update",
+        id,
+        "--title",
+        nb.title,
+        "-t",
+        nb.issue_type,
+        "-p",
+        &p,
+    ];
+    if !nb.description.is_empty() {
+        args.push("--description");
+        args.push(nb.description);
+    }
+    if !nb.assignee.is_empty() {
+        args.push("-a");
+        args.push(nb.assignee);
+    }
+    if !nb.parent.is_empty() {
+        args.push("--parent");
+        args.push(nb.parent);
+    }
+    if !nb.labels.is_empty() {
+        args.push("--set-labels");
+        args.push(nb.labels);
+    }
+    run(scope, &args)?;
+    if nb.deferred {
+        let _ = set_status(scope, id, "deferred");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

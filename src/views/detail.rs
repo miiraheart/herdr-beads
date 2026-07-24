@@ -8,7 +8,7 @@ use crate::ui::widgets::centered_rect;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 pub fn build_lines(b: &Bead) -> Vec<Line<'static>> {
@@ -110,6 +110,7 @@ pub fn render_side(f: &mut Frame, area: Rect, app: &App) {
 
 pub fn render_modal(f: &mut Frame, area: Rect, app: &App) {
     let rect = centered_rect(70, 80, area);
+    f.render_widget(Clear, rect);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)

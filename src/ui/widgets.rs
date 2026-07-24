@@ -3,12 +3,12 @@
 use crate::app::App;
 use crate::form::CreateForm;
 use crate::keys::help_lines;
-use crate::model::View;
+use crate::model::{status_label, View};
 use crate::ui::theme;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 pub fn truncate(s: &str, w: usize) -> String {
@@ -133,6 +133,7 @@ pub fn render_input(f: &mut Frame, area: Rect, app: &App) {
         w,
         3,
     );
+    f.render_widget(Clear, rect);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -152,11 +153,17 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
         F_ASSIGNEE, F_BACKLOG, F_DESC, F_EPIC, F_LABELS, F_PRIORITY, F_TITLE, F_TYPE,
     };
     let rect = centered_rect(68, 84, area);
+    f.render_widget(Clear, rect);
+    let title = if form.edit_id.is_some() {
+        " Edit bead - Tab/↑↓ field · ←→ choose · Space toggle · Enter save · Esc cancel "
+    } else {
+        " New bead - Tab/↑↓ field · ←→ choose · Space toggle · Enter create · Esc cancel "
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme::MAUVE))
-        .title(" New bead - Tab/↑↓ field · ←→ choose · Space toggle · Enter create · Esc cancel ")
+        .title(title)
         .style(Style::default().bg(Color::Reset));
 
     let cur = form.field;
@@ -263,8 +270,42 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
     );
 }
 
+/// Status picker overlay: board statuses numbered 1-9 for a one-key retag.
+pub fn render_status_pick(f: &mut Frame, area: Rect, app: &App) {
+    let statuses = app.board_statuses();
+    let mut spans: Vec<Span> = Vec::new();
+    for (i, s) in statuses.iter().enumerate().take(9) {
+        spans.push(Span::styled(
+            format!(" {} ", i + 1),
+            Style::default().fg(theme::OVERLAY0),
+        ));
+        spans.push(Span::styled(
+            format!("{}  ", status_label(s)),
+            Style::default()
+                .fg(theme::status_color(s))
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    let w = area.width.min(74);
+    let rect = Rect::new(
+        area.x + (area.width.saturating_sub(w)) / 2,
+        area.y + area.height / 2,
+        w,
+        3,
+    );
+    f.render_widget(Clear, rect);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::MAUVE))
+        .title(" Set status - press 1-9 (Esc cancels) ")
+        .style(Style::default().bg(Color::Reset));
+    f.render_widget(Paragraph::new(Line::from(spans)).block(block), rect);
+}
+
 pub fn render_help(f: &mut Frame, area: Rect) {
     let rect = centered_rect(70, 80, area);
+    f.render_widget(Clear, rect);
     let mut lines: Vec<Line> = vec![
         Line::from(Span::styled(
             "herdr-beads - keys",

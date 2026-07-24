@@ -25,11 +25,15 @@ pub fn help_lines() -> Vec<(&'static str, &'static str)> {
             "a",
             "new bead form (Tab: field · ←→: type/priority · Enter: create)",
         ),
+        ("e", "edit selected bead (reopens the form)"),
+        ("s", "set status (then pick 1-9)"),
+        ("F", "focus: show only this status group"),
         ("o", "table: cycle sort (status/priority/changed)"),
         ("/", "filter  (Esc clears it)"),
         ("g", "toggle scope repo ⇄ global"),
         ("C", "toggle showing closed"),
         ("r", "refresh from bd"),
+        ("f", "zoom pane fullscreen (toggle)"),
         ("? ", "this help"),
         ("q", "quit"),
         ("Esc", "back out a layer (never quits)"),
@@ -99,6 +103,15 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
     // 2) Help overlay: any key closes it.
     if app.show_help {
         app.show_help = false;
+        return;
+    }
+
+    // 2b) Status picker: a digit sets the selected bead's status; anything else cancels.
+    if app.status_pick {
+        match key.code {
+            KeyCode::Char(c @ '1'..='9') => app.pick_status((c as u8 - b'1') as usize),
+            _ => app.status_pick = false,
+        }
         return;
     }
 
@@ -181,6 +194,13 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
         }
         KeyCode::Char('a') => app.open_create_form(),
+        KeyCode::Char('e') => app.open_edit_form(),
+        KeyCode::Char('s') => {
+            if app.selected.is_some() {
+                app.status_pick = true;
+            }
+        }
+        KeyCode::Char('F') => app.focus_status(),
         KeyCode::Char('o') => {
             if app.view == View::Table {
                 app.sort = app.sort.next();
@@ -192,6 +212,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('g') => app.toggle_scope(),
         KeyCode::Char('C') => app.toggle_closed(),
         KeyCode::Char('r') => app.reload(),
+        KeyCode::Char('f') => app.toggle_zoom(),
         _ => {}
     }
 }

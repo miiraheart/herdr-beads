@@ -21,7 +21,7 @@ pub fn run(scope: Scope) -> Result<()> {
 
     for status in statuses {
         let mut group: Vec<&_> = beads.iter().filter(|b| b.status == status).collect();
-        group.sort_by(|a, b| a.priority.cmp(&b.priority));
+        group.sort_by_key(|a| a.priority);
         println!(
             "{} {} ({})",
             status_glyph(&status),

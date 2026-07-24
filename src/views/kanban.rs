@@ -8,7 +8,7 @@ use crate::ui::widgets::truncate_soft;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Block, BorderType, Borders};
 use ratatui::Frame;
 
 pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
@@ -18,36 +18,44 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
     }
     let n = cols.len();
     let constraints: Vec<Constraint> = (0..n).map(|_| Constraint::Ratio(1, n as u32)).collect();
-    let rects = Layout::horizontal(constraints).split(area);
+    // One-column gutter so adjacent boxes never share a border edge.
+    let rects = Layout::horizontal(constraints).spacing(1).split(area);
 
     let sel_status = app.selected_bead().map(|b| b.status.clone());
 
     for (i, (status, col_ids)) in cols.iter().enumerate() {
         let rect = rects[i];
+        if rect.width < 3 {
+            continue;
+        }
         let color = theme::status_color(status);
         let active = sel_status.as_deref() == Some(status.as_str());
-        let hdr_style = if active {
-            Style::default()
-                .fg(theme::BASE)
-                .bg(color)
-                .add_modifier(Modifier::BOLD)
-        } else {
+        // Selected column's box lights up in its status color; the rest stay dim.
+        let border_style = if active {
             Style::default().fg(color).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme::OVERLAY0)
         };
-        let hdr = Line::from(vec![
-            Span::styled(format!(" {} ", status_label(status)), hdr_style),
+        let title = Line::from(vec![
             Span::styled(
-                format!(" {}", col_ids.len()),
+                format!(" {} ", status_label(status)),
+                Style::default().fg(color).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("{} ", col_ids.len()),
                 Style::default().fg(theme::OVERLAY0),
             ),
         ]);
-        let vrects = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(rect);
-        f.render_widget(
-            Paragraph::new(hdr).style(Style::default().bg(Color::Reset)),
-            vrects[0],
-        );
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(border_style)
+            .title(title)
+            .style(Style::default().bg(Color::Reset));
+        let inner = block.inner(rect);
+        f.render_widget(block, rect);
 
-        let cw = rect.width as usize;
+        let cw = inner.width as usize;
         let mut lines: Vec<Line<'static>> = Vec::new();
         let mut ids: Vec<Option<String>> = Vec::new();
         for id in col_ids {
@@ -75,6 +83,6 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
                 ids.push(None);
             }
         }
-        super::render_lines(f, vrects[1], app, lines, ids);
+        super::render_lines(f, inner, app, lines, ids);
     }
 }

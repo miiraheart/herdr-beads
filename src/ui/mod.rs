@@ -32,11 +32,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
         render_view(f, cols[0], app);
         views::detail::render_side(f, cols[1], app);
     } else if want_detail {
-        // narrow sidebar: detail below the list so it still fits
-        let det_h = (body.height / 2).clamp(6, 18);
-        let stack = Layout::vertical([Constraint::Min(3), Constraint::Length(det_h)]).split(body);
-        render_view(f, stack[0], app);
-        views::detail::render_side(f, stack[1], app);
+        // narrow sidebar: float the detail on top of the list (Clear-backed
+        // modal) instead of splitting it below, so the full list stays put.
+        render_view(f, body, app);
+        views::detail::render_modal(f, area, app);
     } else {
         render_view(f, body, app);
     }
@@ -54,6 +53,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
     }
     if app.show_help {
         widgets::render_help(f, area);
+    }
+    if app.status_pick {
+        widgets::render_status_pick(f, area, app);
     }
 }
 
