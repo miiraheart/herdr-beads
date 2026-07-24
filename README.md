@@ -19,20 +19,6 @@ A [beads](https://github.com/steveyegge/beads) (`bd`) task board for [herdr](htt
 
 <img width="1500" height="914" alt="image" src="https://github.com/user-attachments/assets/e0d48710-3c9d-40c9-892e-58a743caaa98" />
 
-
-```
- Beads                                    [List] Table Kanban   scope:repo
- v Open (3)
-     P0 B  demo-3    Fix flaky navigation test
-     P1 D  demo-2    Design token pipeline
-   > P2 F  demo-1    Add dark-mode toggle              (dep 1)
- v In Progress (0)
- v Blocked (0)
- v Deferred (0)
-
- 3 beads, repo    K view, j/k move, v move, c claim, x close, a new, / filter, ? help
-```
-
 `bd` is where the work lives; herdr-beads is the window onto it. Cards are `bd` issues, columns are `bd` statuses, moving a card runs `bd update --status`, and creating one runs `bd create`. The board never invents its own store.
 
 ## Features
@@ -51,25 +37,6 @@ A [beads](https://github.com/steveyegge/beads) (`bd`) task board for [herdr](htt
 - **Repo-scoped automatically**: the board reads the `bd` database of the herdr window's project. `g` flips to `--global` if you run a shared-server bd database.
 - **Transparent**: no solid background. Your terminal theme, image, or blur shows through. Selection and the active tab keep an accent for legibility.
 - **Mouse-optional**: click the view tabs, click a card or row, scroll. Everything also has a key.
-
-### Table view
-
-```
- Beads                                    List [Table] Kanban   scope:repo   sort:priority
-   ID             P   STATUS       TYPE     OWNER      TITLE
-   demo-3         P0  Blocked      bug      -          Fix flaky navigation test
-   demo-2         P1  In Progress  epic     -          Design token pipeline
- > demo-1         P2  Open         feature  -          Add dark-mode toggle
-```
-
-### Kanban view
-
-```
- Open 2                    In Progress 1             Blocked 0
- ......................    ......................    ......................
-  P1 demo-2               > P2 demo-1                (empty)
-    Design token pipe...     Add dark-mode toggle
-```
 
 ## Keys
 
