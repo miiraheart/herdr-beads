@@ -17,6 +17,9 @@
 
 A [beads](https://github.com/steveyegge/beads) (`bd`) task board for [herdr](https://herdr.dev). Your `bd` issues as a **List**, a **Table**, or a **Kanban**, docked as a narrow sidebar beside your agents or floating as a full-screen popup. One small Rust/ratatui binary: keyboard-first, mouse-optional, and transparent so your terminal shows through.
 
+<img width="1500" height="914" alt="image" src="https://github.com/user-attachments/assets/e0d48710-3c9d-40c9-892e-58a743caaa98" />
+
+
 ```
  Beads                                    [List] Table Kanban   scope:repo
  v Open (3)
