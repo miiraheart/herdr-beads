@@ -612,7 +612,16 @@ impl App {
     // ---------------------------------------------------------- scope/view
 
     pub fn toggle_scope(&mut self) {
-        self.scope = self.scope.toggled();
+        let target = self.scope.toggled();
+        // Honor the README: without a shared-server global DB, switching to
+        // global stays on repo and mutates nothing. Check before committing the
+        // scope so a failed probe never parks the board on an empty global list.
+        if target == Scope::Global && !bd::global_available() {
+            self.status_msg =
+                "global needs a shared-server bd DB (not configured) - staying on repo".into();
+            return;
+        }
+        self.scope = target;
         self.reload();
     }
 

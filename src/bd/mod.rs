@@ -35,7 +35,9 @@ pub fn run(scope: Scope, args: &[&str]) -> Result<String> {
     }
     if scope == Scope::Global {
         cmd.arg("--global");
-        // bd's --global needs shared-server mode; opt in (harmless if unavailable).
+        // bd's --global needs shared-server mode; opt in (harmless if unavailable:
+        // bd ≥ 1.2 just errors when no shared server is reachable and leaves the
+        // repo's embedded store untouched).
         cmd.env("BEADS_DOLT_SHARED_SERVER", "1");
     }
     cmd.args(args);
@@ -47,6 +49,14 @@ pub fn run(scope: Scope, args: &[&str]) -> Result<String> {
         bail!("bd {}: {}", args.join(" "), err.trim());
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Whether a global shared-server bd database is reachable. Read-only probe
+/// (`bd --global status`) used to gate the scope toggle so we honor the README:
+/// no global DB ⇒ stay on repo instead of parking the board on an empty global
+/// list. Returns false when no shared server is configured or reachable.
+pub fn global_available() -> bool {
+    run(Scope::Global, &["status"]).is_ok()
 }
 
 pub fn parse_list(s: &str) -> Result<Vec<Bead>> {
