@@ -47,6 +47,13 @@ title = "Beads: open floating board"
 contexts = ["workspace", "tab", "pane"]
 command = ["bash", "scripts/open-board.sh"]
 
+# Opt-in: open the dock in each new tab. Off unless the user creates the
+# marker file, so existing layouts are untouched:
+#   touch "$(herdr plugin config-dir herdr-beads)/auto-dock"
+[[events]]
+on = "tab.created"
+command = ["bash", "scripts/auto-dock.sh"]
+
 # Close every beads pane so they respawn on the latest build after a rebuild.
 [[actions]]
 id = "redeploy"
