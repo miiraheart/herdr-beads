@@ -5,12 +5,9 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib.sh
 . "$DIR/lib.sh"
 
-# Toggle: if the floating board is already open, close it.
-mapfile -t _open < <(beads_panes_by_title herdr-beads-board)
-if [ "${#_open[@]}" -gt 0 ]; then
-  for pid in "${_open[@]}"; do "$HERDR_BIN" pane close "$pid" >/dev/null 2>&1; done
-  exit 0
-fi
+# No toggle-to-close here: a herdr popup is a session resource, not a pane. It
+# has no pane ID and never shows up in `pane list`, so the lookup that closes
+# the dock can never find the board. `q` inside the board is the way out.
 
 CWD="$(focused_cwd)"
 
