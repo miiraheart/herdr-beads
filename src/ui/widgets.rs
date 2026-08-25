@@ -3,7 +3,7 @@
 use crate::app::App;
 use crate::form::CreateForm;
 use crate::keys::help_lines;
-use crate::model::{status_label, View};
+use crate::model::{status_label, Mode, View};
 use crate::ui::theme;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -90,10 +90,14 @@ pub fn render_activity_bar(f: &mut Frame, area: Rect, app: &mut App) {
 }
 
 pub fn render_status_bar(f: &mut Frame, area: Rect, app: &App) {
+    // The board is a herdr popup: it grabs every key, the toggle cannot reach it,
+    // and Esc only backs out a layer. `q` is the only way out, so it leads.
     let hint = if app.move_mode {
         "MOVE: h/l retag · v/Esc exit"
+    } else if app.mode == Mode::Popup {
+        "q close board · K view · j/k move · c claim · x close · a new · / filter · ? help"
     } else {
-        "K view · j/k move · v move-mode · c claim · x close · a new · / filter · g scope · ? help"
+        "K view · j/k move · v move-mode · c claim · x close · a new · / filter · g scope · ? help · q quit"
     };
     let left = Span::styled(
         format!(" {} ", app.status_msg),

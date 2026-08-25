@@ -102,7 +102,7 @@ type = "plugin_action"
 command = "herdr-beads.open-board"
 ```
 
-Both keys toggle: press to open, press again to close. The floating popup is session-modal, so while it is focused it grabs all keys. Dismiss it with `q` or `Esc`; the toggle key closes it from any other pane.
+The dock key toggles: press to open, press again to close. The floating board is a herdr popup, which is session-modal and grabs all keys while focused. Close it with `q`. `Esc` only backs out a layer, and the toggle key cannot reach it either, because herdr popups have no pane ID and do not appear in the pane API.
 
 The plugin also exposes its actions in herdr's command palette: **Beads: toggle dock**, **Beads: open floating board**, and **Beads: redeploy panes** (closes every beads pane so they respawn on a fresh build).
 
