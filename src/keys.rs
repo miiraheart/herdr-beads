@@ -9,7 +9,9 @@ use ratatui::layout::Rect;
 pub fn help_lines() -> Vec<(&'static str, &'static str)> {
     vec![
         ("K / Tab", "cycle view (List / Table / Kanban)"),
+        ("Shift+Tab", "cycle view backwards"),
         ("j k ↑ ↓", "move selection"),
+        ("Home / G End", "jump to the first or last card"),
         ("h l ← →", "kanban: change column · list: collapse/expand"),
         ("1-9", "jump to status group N"),
         ("[ ]", "jump to prev / next status group"),
