@@ -27,9 +27,10 @@ A [beads](https://github.com/steveyegge/beads) (`bd`) task board for [herdr](htt
   - **List**: grouped by status, collapsible, one bead per line, with an inline detail pane.
   - **Table**: flat, aligned columns, the only re-sortable view (`o` cycles status, priority, changed).
   - **Kanban**: one column per status. `v` then arrows retag a card across columns.
-- **Two surfaces from the same binary**, each a single toggle key:
-  - **Docked sidebar**: pinned to the left of the tab, narrowed to a sidebar column.
-  - **Floating popup**: a wide, full board over your layout.
+- **Two surfaces from the same binary**:
+  - **Docked sidebar**: pinned to the left of the tab, narrowed to a sidebar column. One key toggles it open and closed, per tab.
+  - **Floating popup**: a wide, full board over your layout. A key opens it; `q` closes it from inside, since a herdr popup is session-modal and no outside key can reach it.
+- **Auto-dock** (`A`, off by default): every new tab opens with the dock already in place, docked left and narrowed, without pulling your focus out of the tab you are working in.
 - **Real edits, straight to `bd`**: claim, close (with a required reason), set priority, add a note (`bd note`) or a comment (`bd comment`), and a full create form.
 - **Rich create form** (`a`): Type, Priority, Title, Description, Assignee, Parent epic, Labels, and a start-in-backlog toggle. Every field `bd create` supports.
 - **Types at a glance**: each row carries a type tag (epic, bug `B`, feature `F`, chore `C`, spike `S`, story `Y`, decision `D`, task), colored so epics stand out.
@@ -45,7 +46,9 @@ Mouse works everywhere; every action also has a key.
 | Key | Action |
 | --- | --- |
 | `K`, `Tab` | cycle view (List, Table, Kanban) |
+| `Shift`+`Tab` | cycle view backwards |
 | `j` `k` up/down | move selection |
+| `Home`, `G` / `End` | jump to the first or last card |
 | `h` `l` left/right | kanban: change column. list: collapse or expand a group |
 | `1`..`9` | jump to the Nth status group |
 | `[` `]` | jump to the previous or next status group |
@@ -58,12 +61,16 @@ Mouse works everywhere; every action also has a key.
 | `n` | add a note (`bd note`) |
 | `m` | add a comment (`bd comment`) |
 | `a` | open the new-bead form |
+| `e` | edit the selected bead (reopens the form) |
+| `s` | set status, then pick 1 to 9 |
+| `F` | focus: show only this status group |
 | `o` | table: cycle sort (status, priority, changed) |
 | `/` | filter. `Esc` clears it |
 | `g` | scope: repo or global |
 | `C` | show or hide closed |
 | `A` | auto-open the dock in new tabs (toggle) |
 | `r` | refresh from `bd` |
+| `f` | zoom the pane fullscreen (toggle) |
 | `?` | key help overlay |
 | `q` | quit. `Esc` only backs out a layer, it never quits |
 
