@@ -107,6 +107,22 @@ pub fn render_status_bar(f: &mut Frame, area: Rect, app: &App) {
     );
 }
 
+/// Centre a help popup tall enough for `content_lines`, never taller than the
+/// pane. Width stays generous so long descriptions do not wrap and push later
+/// entries out of view.
+pub fn help_rect(area: Rect, content_lines: u16) -> Rect {
+    let height = content_lines.saturating_add(2).min(area.height);
+    let width = area.width.saturating_mul(4) / 5;
+    let width = width.max(40).min(area.width);
+
+    Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    }
+}
+
 pub fn centered_rect(px: u16, py: u16, area: Rect) -> Rect {
     let v = Layout::vertical([
         Constraint::Percentage((100 - py) / 2),
@@ -304,8 +320,6 @@ pub fn render_status_pick(f: &mut Frame, area: Rect, app: &App) {
 }
 
 pub fn render_help(f: &mut Frame, area: Rect) {
-    let rect = centered_rect(70, 80, area);
-    f.render_widget(Clear, rect);
     let mut lines: Vec<Line> = vec![
         Line::from(Span::styled(
             "herdr-beads - keys",
@@ -326,6 +340,14 @@ pub fn render_help(f: &mut Frame, area: Rect) {
         "  any key to close",
         Style::default().fg(theme::OVERLAY0),
     )));
+
+    // Size to the content instead of a fixed 80% of the pane. At a fixed
+    // fraction the list is silently truncated by Paragraph, and the entries
+    // near the bottom - including "C  toggle showing closed" - are simply not
+    // there to be found.
+    let rect = help_rect(area, lines.len() as u16);
+    f.render_widget(Clear, rect);
+
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -338,4 +360,46 @@ pub fn render_help(f: &mut Frame, area: Rect) {
             .wrap(Wrap { trim: false }),
         rect,
     );
+}
+
+#[cfg(test)]
+mod help_rect_tests {
+    use super::*;
+
+    fn area(w: u16, h: u16) -> Rect {
+        Rect {
+            x: 0,
+            y: 0,
+            width: w,
+            height: h,
+        }
+    }
+
+    /// The whole point: every help line must have somewhere to render. At a
+    /// fixed fraction of the pane the tail of the list was cut off, which is
+    /// how "C  toggle showing closed" went missing.
+    #[test]
+    fn tall_enough_for_every_line_when_the_pane_allows() {
+        let r = help_rect(area(120, 50), 29);
+        assert_eq!(r.height, 31, "29 lines + 2 border rows");
+        assert!(r.y + r.height <= 50);
+    }
+
+    #[test]
+    fn never_taller_than_the_pane() {
+        for h in [1u16, 2, 5, 20, 31] {
+            let r = help_rect(area(120, h), 29);
+            assert!(r.height <= h, "escaped a {h}-row pane");
+            assert!(r.y + r.height <= h);
+        }
+    }
+
+    #[test]
+    fn stays_inside_a_narrow_pane() {
+        for w in [1u16, 10, 39, 40, 120] {
+            let r = help_rect(area(w, 50), 29);
+            assert!(r.width <= w, "escaped a {w}-column pane");
+            assert!(r.x + r.width <= w);
+        }
+    }
 }
