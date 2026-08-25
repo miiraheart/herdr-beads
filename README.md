@@ -62,6 +62,7 @@ Mouse works everywhere; every action also has a key.
 | `/` | filter. `Esc` clears it |
 | `g` | scope: repo or global |
 | `C` | show or hide closed |
+| `A` | auto-open the dock in new tabs (toggle) |
 | `r` | refresh from `bd` |
 | `?` | key help overlay |
 | `q` | quit. `Esc` only backs out a layer, it never quits |
@@ -127,7 +128,7 @@ The plugin also exposes its actions in herdr's command palette: **Beads: toggle 
 ## Configuration
 
 - **Keybindings** live in `~/.config/herdr/config.toml` (see above).
-- **Auto-open the dock in new tabs** (off by default): `touch "$(herdr plugin config-dir herdr-beads)/auto-dock"`. A `tab.created` hook then opens the dock in each new tab, docked left and narrowed, without moving your focus out of the tab you are in. Delete the file to go back to opening it by hand. Only the dock does this: the floating board is a herdr popup, and a session has just one popup, not one per tab.
+- **Auto-open the dock in new tabs** (off by default): press `A` in the board. The activity bar shows `+auto` while it is on, and a `tab.created` hook then opens the dock in each new tab, docked left and narrowed, without moving your focus out of the tab you are in. Press `A` again to stop. The setting lives in the plugin config directory, so it survives restarts and applies to the next tab with no reload. Only the dock does this: the floating board is a herdr popup, and a session has just one popup, not one per tab.
 - **Scope**: `g` toggles between the window's repo `.beads` and `bd --global`. Global requires a bd shared-server database (`BEADS_DOLT_SHARED_SERVER=1`); without one the board says so and stays on repo scope.
 - **Theme**: a fixed Catppuccin-Macchiato accent palette on a transparent background, so it blends with any terminal theme.
 
