@@ -70,7 +70,7 @@ Mouse works everywhere; every action also has a key.
 
 ## Install
 
-Requires **herdr 0.7.0 or newer** (0.7.5+ is recommended so the plugin loads in every session automatically), a **Rust toolchain** (the plugin builds from source on install), and **`bd`** ([beads](https://github.com/steveyegge/beads)) on your `PATH`.
+Requires **herdr 0.7.0 or newer** (0.7.5+ is recommended so the plugin loads in every session automatically), a **Rust toolchain** (1.78 or newer, since the committed `Cargo.lock` uses lockfile v4; the plugin builds from source on install), and **`bd`** ([beads](https://github.com/steveyegge/beads)) on your `PATH`.
 
 ```bash
 herdr plugin install miiraheart/herdr-beads
