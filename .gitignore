@@ -1,3 +1,9 @@
 /target
 **/*.rs.bk
 /logs
+
+# Local planning notes and session state. These name real projects, paths and
+# people, and this repo is public. They must never become tracked files.
+.planning/
+docs/superpowers/
+.claude/
