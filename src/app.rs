@@ -43,6 +43,10 @@ pub struct App {
     pub show_help: bool,
     /// When true, digits 1-9 set the selected bead's status (see `pick_status`).
     pub status_pick: bool,
+    /// A `g` was pressed and we are waiting for the second key of `gg`.
+    pub g_pending: bool,
+    /// Rows of the last rendered body, so page motions match what you see.
+    pub viewport_rows: u16,
     pub status_msg: String,
     pub should_quit: bool,
     pub hits: Hits,
@@ -68,6 +72,8 @@ impl App {
             create_form: None,
             show_help: false,
             status_pick: false,
+            g_pending: false,
+            viewport_rows: 20,
             status_msg: String::new(),
             should_quit: false,
             hits: Hits::default(),
@@ -635,6 +641,60 @@ impl App {
     pub fn open_detail(&mut self) {
         self.detail_modal = true;
         self.refresh_detail();
+    }
+
+    /// Half a screen, the way vim's Ctrl-d moves. Never zero, or the key
+    /// would look broken on a very short pane.
+    pub fn half_page(&self) -> i32 {
+        ((self.viewport_rows / 2) as i32).max(1)
+    }
+
+    pub fn page(&self) -> i32 {
+        (self.viewport_rows as i32).max(1)
+    }
+
+    /// Jump to the first or last column of the board. Kanban only; the other
+    /// views have a single column, where it would be a no-op.
+    pub fn nav_edge_column(&mut self, last: bool) {
+        if self.view != View::Kanban {
+            return;
+        }
+        let cols = self.columns().len() as i32;
+        self.nav_horiz(if last { cols } else { -cols });
+    }
+
+    /// Copy the selected bead id to the system clipboard, so it can be pasted
+    /// into a commit message or a `bd` command.
+    pub fn yank_id(&mut self) {
+        let Some(id) = self.selected.clone() else {
+            self.status_msg = "nothing selected".into();
+            return;
+        };
+        let candidates: [(&str, &[&str]); 3] = [
+            ("pbcopy", &[]),
+            ("wl-copy", &[]),
+            ("xclip", &["-selection", "clipboard"]),
+        ];
+        for (bin, args) in candidates {
+            let mut child = match std::process::Command::new(bin)
+                .args(args)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+            {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            if let Some(mut stdin) = child.stdin.take() {
+                use std::io::Write;
+                let _ = stdin.write_all(id.as_bytes());
+            }
+            let _ = child.wait();
+            self.status_msg = format!("yanked {id}");
+            return;
+        }
+        self.status_msg = "no clipboard tool (pbcopy, wl-copy, xclip)".into();
     }
 
     pub fn toggle_detail(&mut self) {

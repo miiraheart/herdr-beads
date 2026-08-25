@@ -23,6 +23,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
     widgets::render_activity_bar(f, rows[0], app);
 
     let body = rows[1];
+    // Page motions move by what is on screen, so remember the body height.
+    app.viewport_rows = body.height;
     let want_detail = app.show_detail && app.view != View::Kanban;
     if want_detail && body.width > 70 {
         // wide: detail beside the list
