@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 # tab.created hook: open the dock in the new tab, but only when the user has
-# opted in. Opt in with:
-#
-#   touch "$(herdr plugin config-dir herdr-beads)/auto-dock"
-#
+# opted in by pressing A in the board, which writes the marker this checks.
 # Manual toggling stays the default so existing layouts do not change.
 set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"

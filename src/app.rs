@@ -645,4 +645,81 @@ impl App {
         }
         self.refresh_detail();
     }
+
+    /// The opt-in marker the tab.created hook looks for. herdr hands every
+    /// plugin command its own config directory, and that is the only place a
+    /// plugin may keep user-editable settings.
+    fn auto_dock_marker() -> Option<std::path::PathBuf> {
+        let dir = std::env::var("HERDR_PLUGIN_CONFIG_DIR").ok()?;
+        if dir.is_empty() {
+            return None;
+        }
+        Some(std::path::Path::new(&dir).join("auto-dock"))
+    }
+
+    pub fn auto_dock_enabled(&self) -> bool {
+        Self::auto_dock_marker().is_some_and(|p| p.exists())
+    }
+
+    /// Turn auto-dock on or off. The hook reads the marker on each tab.created,
+    /// so the change applies to the next tab with no reload.
+    pub fn toggle_auto_dock(&mut self) {
+        let Some(path) = Self::auto_dock_marker() else {
+            self.status_msg = "auto-dock needs herdr (no plugin config dir)".into();
+            return;
+        };
+        if path.exists() {
+            match std::fs::remove_file(&path) {
+                Ok(()) => self.status_msg = "auto-dock off".into(),
+                Err(e) => self.status_msg = format!("auto-dock: {e}"),
+            }
+            return;
+        }
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::write(&path, "") {
+            Ok(()) => self.status_msg = "auto-dock on: new tabs open the dock".into(),
+            Err(e) => self.status_msg = format!("auto-dock: {e}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod auto_dock_tests {
+    use super::*;
+    use crate::model::{Mode, Scope};
+
+    /// One test, not two: HERDR_PLUGIN_CONFIG_DIR is process-global, so
+    /// parallel tests that set and clear it race each other.
+    ///
+    /// The marker is the contract between this toggle and the tab.created
+    /// hook, so the round trip has to leave the directory as it found it.
+    #[test]
+    fn toggles_the_marker_and_reports_when_unconfigured() {
+        let dir = std::env::temp_dir().join(format!("hb-auto-dock-{}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("HERDR_PLUGIN_CONFIG_DIR", &dir);
+
+        let mut app = App::new(Mode::Dock, Scope::Repo);
+        assert!(!app.auto_dock_enabled(), "starts off");
+
+        app.toggle_auto_dock();
+        assert!(app.auto_dock_enabled(), "on after the first press");
+        assert!(dir.join("auto-dock").exists());
+
+        app.toggle_auto_dock();
+        assert!(!app.auto_dock_enabled(), "off after the second");
+        assert!(!dir.join("auto-dock").exists());
+
+        // Outside herdr there is no config dir, so the toggle has to say so
+        // instead of silently doing nothing.
+        std::env::remove_var("HERDR_PLUGIN_CONFIG_DIR");
+        app.toggle_auto_dock();
+        assert!(!app.auto_dock_enabled());
+        assert!(app.status_msg.contains("needs herdr"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

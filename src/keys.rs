@@ -32,6 +32,7 @@ pub fn help_lines() -> Vec<(&'static str, &'static str)> {
         ("/", "filter  (Esc clears it)"),
         ("g", "toggle scope repo ⇄ global"),
         ("C", "toggle showing closed"),
+        ("A", "auto-open the dock in new tabs (toggle)"),
         ("r", "refresh from bd"),
         ("f", "zoom pane fullscreen (toggle)"),
         ("? ", "this help"),
@@ -131,6 +132,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.show_detail = false;
             }
         }
+        KeyCode::Char('A') => app.toggle_auto_dock(),
         KeyCode::Char('?') => app.show_help = true,
 
         KeyCode::Char('K') | KeyCode::Tab => {

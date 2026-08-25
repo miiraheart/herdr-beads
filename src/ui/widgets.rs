@@ -70,6 +70,9 @@ pub fn render_activity_bar(f: &mut Frame, area: Rect, app: &mut App) {
     if app.show_closed {
         right.push_str(" +closed");
     }
+    if app.auto_dock_enabled() {
+        right.push_str(" +auto");
+    }
     if !app.filter.is_empty() {
         right.push_str(&format!("  /{}", app.filter));
     }
