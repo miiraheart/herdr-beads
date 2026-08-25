@@ -7,8 +7,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib.sh
 . "$DIR/lib.sh"
 
-# Toggle: if a beads dock is already open in this workspace, close it.
-mapfile -t _open < <(beads_panes_by_title herdr-beads-dock ws)
+# Toggle: if a beads dock is already open in this tab, close it.
+mapfile -t _open < <(beads_panes_by_title herdr-beads-dock tab)
 if [ "${#_open[@]}" -gt 0 ]; then
   for pid in "${_open[@]}"; do "$HERDR_BIN" pane close "$pid" >/dev/null 2>&1; done
   exit 0

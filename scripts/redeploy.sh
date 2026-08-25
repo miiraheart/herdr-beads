@@ -6,7 +6,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib.sh
 . "$DIR/lib.sh"
 
-mapfile -t ids < <(beads_pane_ids)
+# The marker is a substring match, so this catches dock and board alike.
+mapfile -t ids < <(beads_panes_by_title herdr-beads)
 for pid in "${ids[@]}"; do
   [ -n "$pid" ] && "$HERDR_BIN" pane close "$pid" >/dev/null 2>&1
 done
