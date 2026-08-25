@@ -35,7 +35,8 @@ A [beads](https://github.com/steveyegge/beads) (`bd`) task board for [herdr](htt
 - **Rich create form** (`a`): Type, Priority, Title, Description, Assignee, Parent epic, Labels, and a start-in-backlog toggle. Every field `bd create` supports.
 - **Types at a glance**: each row carries a type tag (epic, bug `B`, feature `F`, chore `C`, spike `S`, story `Y`, decision `D`, task), colored so epics stand out.
 - **Detail everywhere** (`d` or `Enter`): description, dependencies, notes, and counts, enriched by `bd show`. It renders below the list in a narrow sidebar, beside it when wide, or as a modal.
-- **Repo-scoped automatically**: the board reads the `bd` database of the herdr window's project. `g` flips to `--global` if you run a shared-server bd database.
+- **Repo-scoped automatically**: the board reads the `bd` database of the herdr window's project. `S` flips to `--global` if you run a shared-server bd database.
+- **Vim motions**: `hjkl`, `gg` and `G`, `Ctrl`+`d`/`u` and `Ctrl`+`f`/`b` to page, `{` `}` between status groups, `0` `$` for the first and last kanban column, `y` to yank the selected bead id, `/` to filter.
 - **Transparent**: no solid background. Your terminal theme, image, or blur shows through. Selection and the active tab keep an accent for legibility.
 - **Mouse-optional**: click the view tabs, click a card or row, scroll. Everything also has a key.
 
@@ -48,10 +49,12 @@ Mouse works everywhere; every action also has a key.
 | `K`, `Tab` | cycle view (List, Table, Kanban) |
 | `Shift`+`Tab` | cycle view backwards |
 | `j` `k` up/down | move selection |
-| `Home`, `G` / `End` | jump to the first or last card |
+| `gg` / `G` | jump to the first or last card (`Home` / `End` too) |
+| `Ctrl`+`d` / `Ctrl`+`u` | half page down or up |
+| `Ctrl`+`f` / `Ctrl`+`b` | page down or up |
 | `h` `l` left/right | kanban: change column. list: collapse or expand a group |
 | `1`..`9` | jump to the Nth status group |
-| `[` `]` | jump to the previous or next status group |
+| `[` `]`, `{` `}` | jump to the previous or next status group |
 | `Enter` | open the detail modal |
 | `d` | toggle the detail pane (side when wide, below when narrow) |
 | `v` | move mode, then arrows retag the card's status |
@@ -66,7 +69,9 @@ Mouse works everywhere; every action also has a key.
 | `F` | focus: show only this status group |
 | `o` | table: cycle sort (status, priority, changed) |
 | `/` | filter. `Esc` clears it |
-| `g` | scope: repo or global |
+| `0` `$` | kanban: first or last column |
+| `y` | yank the selected bead id to the clipboard |
+| `S` | scope: repo or global |
 | `C` | show or hide closed |
 | `A` | auto-open the dock in new tabs (toggle) |
 | `r` | refresh from `bd` |
@@ -136,7 +141,7 @@ The plugin also exposes its actions in herdr's command palette: **Beads: toggle 
 
 - **Keybindings** live in `~/.config/herdr/config.toml` (see above).
 - **Auto-open the dock in new tabs** (off by default): press `A` in the board. The activity bar shows `+auto` while it is on, and a `tab.created` hook then opens the dock in each new tab, docked left and narrowed, without moving your focus out of the tab you are in. Press `A` again to stop. The setting lives in the plugin config directory, so it survives restarts and applies to the next tab with no reload. Only the dock does this: the floating board is a herdr popup, and a session has just one popup, not one per tab.
-- **Scope**: `g` toggles between the window's repo `.beads` and `bd --global`. Global requires a bd shared-server database (`BEADS_DOLT_SHARED_SERVER=1`); without one the board says so and stays on repo scope.
+- **Scope**: `S` toggles between the window's repo `.beads` and `bd --global`. Global requires a bd shared-server database (`BEADS_DOLT_SHARED_SERVER=1`); without one the board says so and stays on repo scope.
 - **Theme**: a fixed Catppuccin-Macchiato accent palette on a transparent background, so it blends with any terminal theme.
 
 ## Verify without herdr
