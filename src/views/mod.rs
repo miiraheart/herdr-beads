@@ -45,9 +45,9 @@ pub fn render_lines(
     f.render_widget(para, area);
 
     let hl_bg = if app.move_mode {
-        theme::SURFACE2
+        theme::p().surface2
     } else {
-        theme::SURFACE1
+        theme::p().surface1
     };
     for (i, id) in ids.iter().enumerate() {
         if i < offset || i >= offset + h {

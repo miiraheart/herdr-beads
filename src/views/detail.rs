@@ -15,12 +15,12 @@ pub fn build_lines(b: &Bead) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
     lines.push(Line::from(Span::styled(
         b.id.clone(),
-        Style::default().fg(theme::OVERLAY1),
+        Style::default().fg(theme::p().overlay1),
     )));
     lines.push(Line::from(Span::styled(
         b.title.clone(),
         Style::default()
-            .fg(theme::TEXT)
+            .fg(theme::p().text)
             .add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::raw(""));
@@ -35,40 +35,43 @@ pub fn build_lines(b: &Bead) -> Vec<Line<'static>> {
             Style::default().fg(theme::priority_color(b.priority)),
         ),
         Span::raw("   "),
-        Span::styled(b.issue_type.clone(), Style::default().fg(theme::SUBTEXT)),
+        Span::styled(
+            b.issue_type.clone(),
+            Style::default().fg(theme::p().subtext),
+        ),
         Span::raw("   "),
         Span::styled(
             format!("@{}", b.assignee()),
-            Style::default().fg(theme::OVERLAY0),
+            Style::default().fg(theme::p().overlay0),
         ),
     ]));
     if let (Some(c), Some(u)) = (&b.created_at, &b.updated_at) {
         lines.push(Line::from(Span::styled(
             format!("created {c} · updated {u}"),
-            Style::default().fg(theme::OVERLAY0),
+            Style::default().fg(theme::p().overlay0),
         )));
     }
     lines.push(Line::raw(""));
     if !b.description.is_empty() {
         lines.push(Line::from(Span::styled(
             "Description",
-            Style::default().fg(theme::YELLOW),
+            Style::default().fg(theme::p().yellow),
         )));
         lines.push(Line::from(Span::styled(
             b.description.clone(),
-            Style::default().fg(theme::SUBTEXT),
+            Style::default().fg(theme::p().subtext),
         )));
         lines.push(Line::raw(""));
     }
     if !b.dependencies.is_empty() {
         lines.push(Line::from(Span::styled(
             format!("Dependencies ({})", b.dependencies.len()),
-            Style::default().fg(theme::YELLOW),
+            Style::default().fg(theme::p().yellow),
         )));
         for d in &b.dependencies {
             lines.push(Line::from(Span::styled(
                 format!("  • {}", d.label()),
-                Style::default().fg(theme::SUBTEXT),
+                Style::default().fg(theme::p().subtext),
             )));
         }
         lines.push(Line::raw(""));
@@ -78,7 +81,7 @@ pub fn build_lines(b: &Bead) -> Vec<Line<'static>> {
             "deps {} · dependents {} · comments {}",
             b.dependency_count, b.dependent_count, b.comment_count
         ),
-        Style::default().fg(theme::OVERLAY0),
+        Style::default().fg(theme::p().overlay0),
     )));
     lines
 }
@@ -88,7 +91,7 @@ fn lines_for(app: &App) -> Vec<Line<'static>> {
         Some(b) => build_lines(&b),
         None => vec![Line::from(Span::styled(
             "no selection",
-            Style::default().fg(theme::OVERLAY0),
+            Style::default().fg(theme::p().overlay0),
         ))],
     }
 }
@@ -97,7 +100,7 @@ pub fn render_side(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme::SURFACE2))
+        .border_style(Style::default().fg(theme::p().surface2))
         .title(" Detail ")
         .style(Style::default().bg(Color::Reset));
     f.render_widget(
@@ -114,7 +117,7 @@ pub fn render_modal(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme::MAUVE))
+        .border_style(Style::default().fg(theme::p().mauve))
         .title(" Detail - Esc to close ")
         .style(Style::default().bg(Color::Reset));
     f.render_widget(

@@ -53,11 +53,11 @@ pub fn render_activity_bar(f: &mut Frame, area: Rect, app: &mut App) {
         let w = label.chars().count() as u16;
         let style = if v == app.view {
             Style::default()
-                .fg(theme::BASE)
-                .bg(theme::MAUVE)
+                .fg(theme::p().base)
+                .bg(theme::p().mauve)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(theme::SUBTEXT).bg(Color::Reset)
+            Style::default().fg(theme::p().subtext).bg(Color::Reset)
         };
         app.hits.tabs.push((v, Rect::new(x, area.y, w, 1)));
         spans.push(Span::styled(label, style));
@@ -76,14 +76,17 @@ pub fn render_activity_bar(f: &mut Frame, area: Rect, app: &mut App) {
     if !app.filter.is_empty() {
         right.push_str(&format!("  /{}", app.filter));
     }
-    spans.push(Span::styled(right, Style::default().fg(theme::OVERLAY1)));
+    spans.push(Span::styled(
+        right,
+        Style::default().fg(theme::p().overlay1),
+    ));
 
     if app.move_mode {
         spans.push(Span::styled(
             "  MOVE ",
             Style::default()
-                .fg(theme::BASE)
-                .bg(theme::PEACH)
+                .fg(theme::p().base)
+                .bg(theme::p().peach)
                 .add_modifier(Modifier::BOLD),
         ));
     }
@@ -104,9 +107,9 @@ pub fn render_status_bar(f: &mut Frame, area: Rect, app: &App) {
     };
     let left = Span::styled(
         format!(" {} ", app.status_msg),
-        Style::default().fg(theme::GREEN),
+        Style::default().fg(theme::p().green),
     );
-    let right = Span::styled(hint, Style::default().fg(theme::OVERLAY0));
+    let right = Span::styled(hint, Style::default().fg(theme::p().overlay0));
     let line = Line::from(vec![left, Span::raw("  "), right]);
     f.render_widget(
         Paragraph::new(line).style(Style::default().bg(Color::Reset)),
@@ -160,13 +163,13 @@ pub fn render_input(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme::MAUVE))
+        .border_style(Style::default().fg(theme::p().mauve))
         .title(format!(" {} ", inp.title))
         .style(Style::default().bg(Color::Reset));
     let text = Line::from(vec![
-        Span::styled("› ", Style::default().fg(theme::MAUVE)),
-        Span::styled(inp.buffer.clone(), Style::default().fg(theme::TEXT)),
-        Span::styled("█", Style::default().fg(theme::MAUVE)),
+        Span::styled("› ", Style::default().fg(theme::p().mauve)),
+        Span::styled(inp.buffer.clone(), Style::default().fg(theme::p().text)),
+        Span::styled("█", Style::default().fg(theme::p().mauve)),
     ]);
     f.render_widget(Paragraph::new(text).block(block), rect);
 }
@@ -185,7 +188,7 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme::MAUVE))
+        .border_style(Style::default().fg(theme::p().mauve))
         .title(title)
         .style(Style::default().bg(Color::Reset));
 
@@ -193,19 +196,19 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
     let label = |i: u8, name: &str| {
         let style = if i == cur {
             Style::default()
-                .fg(theme::MAUVE)
+                .fg(theme::p().mauve)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(theme::OVERLAY1)
+            Style::default().fg(theme::p().overlay1)
         };
         Span::styled(format!("  {name:<13}"), style)
     };
     let cursor = |i: u8| if i == cur { "█" } else { "" };
     let text = |s: &str, ph: &str| {
         if s.is_empty() {
-            Span::styled(ph.to_string(), Style::default().fg(theme::OVERLAY0))
+            Span::styled(ph.to_string(), Style::default().fg(theme::p().overlay0))
         } else {
-            Span::styled(s.to_string(), Style::default().fg(theme::TEXT))
+            Span::styled(s.to_string(), Style::default().fg(theme::p().text))
         }
     };
 
@@ -219,9 +222,9 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
     };
     let check = if form.deferred { "[x]" } else { "[ ]" };
     let epic_fg = if form.parent_id().is_empty() {
-        theme::OVERLAY1
+        theme::p().overlay1
     } else {
-        theme::MAUVE
+        theme::p().mauve
     };
 
     let lines = vec![
@@ -247,18 +250,18 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
         Line::from(vec![
             label(F_TITLE, "Title"),
             text(&form.title, "what needs doing?"),
-            Span::styled(cursor(F_TITLE), Style::default().fg(theme::MAUVE)),
+            Span::styled(cursor(F_TITLE), Style::default().fg(theme::p().mauve)),
         ]),
         Line::from(vec![
             label(F_DESC, "Description"),
             text(&form.description, "optional details / acceptance"),
-            Span::styled(cursor(F_DESC), Style::default().fg(theme::MAUVE)),
+            Span::styled(cursor(F_DESC), Style::default().fg(theme::p().mauve)),
         ]),
         Line::raw(""),
         Line::from(vec![
             label(F_ASSIGNEE, "Assignee"),
             text(&form.assignee, "unassigned"),
-            Span::styled(cursor(F_ASSIGNEE), Style::default().fg(theme::MAUVE)),
+            Span::styled(cursor(F_ASSIGNEE), Style::default().fg(theme::p().mauve)),
         ]),
         Line::from(vec![
             label(F_EPIC, "Parent epic"),
@@ -270,7 +273,7 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
         Line::from(vec![
             label(F_LABELS, "Labels"),
             text(&form.labels, "comma,separated"),
-            Span::styled(cursor(F_LABELS), Style::default().fg(theme::MAUVE)),
+            Span::styled(cursor(F_LABELS), Style::default().fg(theme::p().mauve)),
         ]),
         Line::raw(""),
         Line::from(vec![
@@ -278,9 +281,9 @@ pub fn render_create_form(f: &mut Frame, area: Rect, form: &CreateForm) {
             Span::styled(
                 format!("{check} start deferred  (Space)"),
                 Style::default().fg(if form.deferred {
-                    theme::YELLOW
+                    theme::p().yellow
                 } else {
-                    theme::OVERLAY0
+                    theme::p().overlay0
                 }),
             ),
         ]),
@@ -300,7 +303,7 @@ pub fn render_status_pick(f: &mut Frame, area: Rect, app: &App) {
     for (i, s) in statuses.iter().enumerate().take(9) {
         spans.push(Span::styled(
             format!(" {} ", i + 1),
-            Style::default().fg(theme::OVERLAY0),
+            Style::default().fg(theme::p().overlay0),
         ));
         spans.push(Span::styled(
             format!("{}  ", status_label(s)),
@@ -320,7 +323,7 @@ pub fn render_status_pick(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme::MAUVE))
+        .border_style(Style::default().fg(theme::p().mauve))
         .title(" Set status - press 1-9 (Esc cancels) ")
         .style(Style::default().bg(Color::Reset));
     f.render_widget(Paragraph::new(Line::from(spans)).block(block), rect);
@@ -331,21 +334,24 @@ pub fn render_help(f: &mut Frame, area: Rect) {
         Line::from(Span::styled(
             "herdr-beads - keys",
             Style::default()
-                .fg(theme::MAUVE)
+                .fg(theme::p().mauve)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::raw(""),
     ];
     for (k, d) in help_lines() {
         lines.push(Line::from(vec![
-            Span::styled(format!("  {:<10}", k), Style::default().fg(theme::YELLOW)),
-            Span::styled(d.to_string(), Style::default().fg(theme::SUBTEXT)),
+            Span::styled(
+                format!("  {:<10}", k),
+                Style::default().fg(theme::p().yellow),
+            ),
+            Span::styled(d.to_string(), Style::default().fg(theme::p().subtext)),
         ]));
     }
     lines.push(Line::raw(""));
     lines.push(Line::from(Span::styled(
         "  any key to close",
-        Style::default().fg(theme::OVERLAY0),
+        Style::default().fg(theme::p().overlay0),
     )));
 
     // Size to the content instead of a fixed 80% of the pane. At a fixed
@@ -358,7 +364,7 @@ pub fn render_help(f: &mut Frame, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme::MAUVE))
+        .border_style(Style::default().fg(theme::p().mauve))
         .style(Style::default().bg(Color::Reset));
     f.render_widget(
         Paragraph::new(lines)

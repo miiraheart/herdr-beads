@@ -33,17 +33,17 @@ pub fn bead_line(b: &Bead, width: u16) -> Line<'static> {
         ),
         Span::styled(
             format!("{:<13} ", truncate_soft(&b.id, 13)),
-            Style::default().fg(theme::OVERLAY1),
+            Style::default().fg(theme::p().overlay1),
         ),
         Span::styled(
             truncate_soft(&b.title, title_w),
-            Style::default().fg(theme::TEXT),
+            Style::default().fg(theme::p().text),
         ),
     ];
     if b.dependency_count > 0 {
         spans.push(Span::styled(
             format!(" ⛓{}", b.dependency_count),
-            Style::default().fg(theme::MAROON),
+            Style::default().fg(theme::p().maroon),
         ));
     }
     Line::from(spans)
@@ -66,7 +66,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             ),
             Span::styled(
                 format!("({})", group_ids.len()),
-                Style::default().fg(theme::OVERLAY0),
+                Style::default().fg(theme::p().overlay0),
             ),
         ]));
         ids.push(None);
@@ -85,7 +85,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
     if lines.is_empty() {
         lines.push(Line::from(Span::styled(
             "  no beads - press a to create, g for global scope",
-            Style::default().fg(theme::OVERLAY0),
+            Style::default().fg(theme::p().overlay0),
         )));
         ids.push(None);
     }
