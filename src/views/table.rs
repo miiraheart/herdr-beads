@@ -36,7 +36,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             asg_w = asg_w,
         ),
         Style::default()
-            .fg(theme::OVERLAY1)
+            .fg(theme::p().overlay1)
             .add_modifier(Modifier::BOLD),
     )]);
 
@@ -51,7 +51,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             Span::raw("  "),
             Span::styled(
                 format!("{:<id_w$} ", truncate(&b.id, id_w), id_w = id_w),
-                Style::default().fg(theme::OVERLAY1),
+                Style::default().fg(theme::p().overlay1),
             ),
             Span::styled(
                 format!(
@@ -76,15 +76,15 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
                     truncate(&b.issue_type, type_w),
                     type_w = type_w
                 ),
-                Style::default().fg(theme::SUBTEXT),
+                Style::default().fg(theme::p().subtext),
             ),
             Span::styled(
                 format!("{:<asg_w$} ", truncate(b.assignee(), asg_w), asg_w = asg_w),
-                Style::default().fg(theme::OVERLAY0),
+                Style::default().fg(theme::p().overlay0),
             ),
             Span::styled(
                 truncate_soft(&b.title, title_w),
-                Style::default().fg(theme::TEXT),
+                Style::default().fg(theme::p().text),
             ),
         ]);
         lines.push(line);

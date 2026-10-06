@@ -142,7 +142,7 @@ The plugin also exposes its actions in herdr's command palette: **Beads: toggle 
 - **Keybindings** live in `~/.config/herdr/config.toml` (see above).
 - **Auto-open the dock in new tabs** (off by default): press `A` in the board. The activity bar shows `+auto` while it is on, and a `tab.created` hook then opens the dock in each new tab, docked left and narrowed, without moving your focus out of the tab you are in. Press `A` again to stop. The setting lives in the plugin config directory, so it survives restarts and applies to the next tab with no reload. Only the dock does this: the floating board is a herdr popup, and a session has just one popup, not one per tab.
 - **Scope**: `S` toggles between the window's repo `.beads` and `bd --global`. Global requires a bd shared-server database (`BEADS_DOLT_SHARED_SERVER=1`); without one the board says so and stays on repo scope.
-- **Theme**: a fixed Catppuccin-Macchiato accent palette on a transparent background, so it blends with any terminal theme.
+- **Theme**: Catppuccin Macchiato by default, on a transparent background. For a light terminal, choose `solarized-light`: write the name to a `theme` file in the plugin config directory (`herdr plugin list` shows it, for example `~/.config/herdr/plugins/config/herdr-beads/theme`), or set `HERDR_BEADS_THEME`. The board reads it at start; an unknown name falls back to Macchiato and says so in the status line. Names: `macchiato`, `solarized-light`.
 
 ## Verify without herdr
 

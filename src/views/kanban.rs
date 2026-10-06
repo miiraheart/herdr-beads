@@ -34,7 +34,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         let border_style = if active {
             Style::default().fg(color).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(theme::OVERLAY0)
+            Style::default().fg(theme::p().overlay0)
         };
         let title = Line::from(vec![
             Span::styled(
@@ -43,7 +43,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             ),
             Span::styled(
                 format!("{} ", col_ids.len()),
-                Style::default().fg(theme::OVERLAY0),
+                Style::default().fg(theme::p().overlay0),
             ),
         ]);
         let block = Block::default()
@@ -67,7 +67,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
                     ),
                     Span::styled(
                         truncate_soft(&b.id, cw.saturating_sub(5)),
-                        Style::default().fg(theme::OVERLAY1),
+                        Style::default().fg(theme::p().overlay1),
                     ),
                 ]));
                 ids.push(Some(id.clone()));
@@ -75,7 +75,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
                     Span::raw(" "),
                     Span::styled(
                         truncate_soft(&b.title, cw.saturating_sub(2)),
-                        Style::default().fg(theme::TEXT),
+                        Style::default().fg(theme::p().text),
                     ),
                 ]));
                 ids.push(Some(id.clone()));

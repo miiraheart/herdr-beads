@@ -115,6 +115,7 @@ fn main() -> Result<()> {
     let (mode, scope, selftest) = parse_args();
 
     apply_working_dir();
+    let unknown_theme = ui::theme::init();
 
     if selftest {
         return selftest::run(scope);
@@ -135,7 +136,11 @@ fn main() -> Result<()> {
     )?;
     let mut terminal = Terminal::new(CrosstermBackend::new(out))?;
 
-    let res = run_app(&mut terminal, App::new(mode, scope));
+    let mut app = App::new(mode, scope);
+    if let Some(name) = unknown_theme {
+        app.status_msg = format!("unknown theme {name:?}; using macchiato");
+    }
+    let res = run_app(&mut terminal, app);
 
     disable_raw_mode()?;
     execute!(
