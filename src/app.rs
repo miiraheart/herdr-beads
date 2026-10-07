@@ -52,14 +52,13 @@ pub struct App {
     pub status_msg: String,
     /// bd's events journal is being followed, so the board updates by itself.
     pub live: bool,
-    /// This workspace's `bd serve` base URL, when it runs one (server mode).
-    pub serve: Option<String>,
     /// Records applied recently, replayed on top of a background reload.
     pub recent: VecDeque<Record>,
-    /// Blocked state needs reloading (after a reload that did not include it).
-    pub blocked_stale: bool,
-    /// A record could not be applied; reload in full in the background.
-    pub snapshot_wanted: bool,
+    /// The board needs a full reload, done in the background.
+    pub reload_wanted: bool,
+    /// A bead whose `bd show` the detail pane is waiting for.
+    pub detail_wanted: Option<String>,
+    pub detail_loading: HashSet<String>,
     /// Runs bd writes in the background.
     pub writer: Writer,
     pub should_quit: bool,
@@ -90,10 +89,10 @@ impl App {
             viewport_rows: 20,
             status_msg: String::new(),
             live: false,
-            serve: None,
             recent: VecDeque::new(),
-            blocked_stale: false,
-            snapshot_wanted: false,
+            reload_wanted: false,
+            detail_wanted: None,
+            detail_loading: HashSet::new(),
             writer: Writer::start(),
             should_quit: false,
             hits: Hits::default(),
@@ -102,41 +101,25 @@ impl App {
         app
     }
 
-    // ---------------------------------------------------------- data
-
-    pub fn reload(&mut self) {
-        let pos = self.selected_pos();
-        let loaded = match (&self.serve, self.scope) {
-            (Some(base), Scope::Repo) => bd::serve::list(base, self.show_closed),
-            _ => bd::load(self.scope, self.show_closed),
-        };
-        match loaded {
-            Ok(mut b) => {
-                // `bd list` has no blocked state: keep what we knew until the
-                // background refresh brings the current one.
-                self.carry_blocked(&mut b);
-                self.blocked_stale = true;
-                self.beads = b;
-                self.status_msg = self.count_msg();
-            }
-            Err(e) => {
-                let first = e.to_string().lines().next().unwrap_or("").to_string();
-                if self.scope == Scope::Global
-                    && (first.contains("shared-server") || first.contains("--global"))
-                {
-                    self.status_msg =
-                        "global needs a shared-server bd DB (not configured) - g = repo".into();
-                } else {
-                    self.status_msg = format!("bd: {}", first.chars().take(90).collect::<String>());
-                }
-                self.beads = Vec::new();
-            }
+    /// The status line for a failed load.
+    pub(crate) fn load_error(scope: Scope, error: &str) -> String {
+        let first = error.lines().next().unwrap_or("");
+        if scope == Scope::Global && (first.contains("shared-server") || first.contains("--global"))
+        {
+            "global needs a shared-server bd DB (not configured) - g = repo".into()
+        } else {
+            format!("bd: {}", first.chars().take(90).collect::<String>())
         }
-        self.detail_cache.clear();
-        self.reselect_near(pos);
-        self.refresh_detail();
     }
 
+    // ---------------------------------------------------------- data
+
+    /// Reload the board in the background (see `App::apply_snapshot`).
+    pub fn reload(&mut self) {
+        self.reload_wanted = true;
+        self.status_msg = "loading...".into();
+        self.detail_cache.clear();
+    }
     fn passes_filter(&self, b: &Bead) -> bool {
         self.filter.is_empty() || b.haystack().contains(&self.filter.to_lowercase())
     }
@@ -278,23 +261,18 @@ impl App {
         Some(b)
     }
 
+    /// Ask for the selected bead's `bd show` when the detail pane needs it;
+    /// it loads in the background and lands in `detail_cache`.
     pub(crate) fn refresh_detail(&mut self) {
         if !(self.show_detail || self.detail_modal) {
             return;
         }
         if let Some(id) = self.selected.clone() {
-            if !self.detail_cache.contains_key(&id) {
-                let shown = match (&self.serve, self.scope) {
-                    (Some(base), Scope::Repo) => bd::serve::show(base, &id),
-                    _ => bd::show(self.scope, &id),
-                };
-                if let Ok(Some(b)) = shown {
-                    self.detail_cache.insert(id, b);
-                }
+            if !self.detail_cache.contains_key(&id) && self.detail_loading.insert(id.clone()) {
+                self.detail_wanted = Some(id);
             }
         }
     }
-
     fn locate_kanban(&self, id: &str) -> Option<(usize, usize)> {
         for (ci, (_s, ids)) in self.columns().iter().enumerate() {
             if let Some(ri) = ids.iter().position(|x| x == id) {
@@ -424,10 +402,8 @@ impl App {
             match done.result {
                 Ok(msg) => {
                     self.status_msg = msg;
-                    if self.scope == Scope::Global {
-                        self.reload();
-                    } else if !self.live {
-                        self.snapshot_wanted = true;
+                    if self.scope == Scope::Global || !self.live {
+                        self.reload_wanted = true;
                     }
                 }
                 Err(e) => {
@@ -685,6 +661,9 @@ impl App {
 
     pub fn toggle_scope(&mut self) {
         self.scope = self.scope.toggled();
+        // The other scope's beads must not show under this one's label.
+        self.beads.clear();
+        self.detail_loading.clear();
         self.reload();
     }
 

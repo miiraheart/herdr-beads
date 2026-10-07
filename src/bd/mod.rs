@@ -13,7 +13,13 @@ use crate::model::Scope;
 use anyhow::{bail, Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
+
+/// The longest any bd call may take before the board gives up on it, so a
+/// hung bd can never hang the board.
+const BD_TIMEOUT: Duration = Duration::from_secs(30);
 use types::Bead;
 
 fn resolve_bd() -> String {
@@ -45,13 +51,35 @@ pub(crate) fn command(scope: Scope) -> Command {
     cmd
 }
 
-/// Run a bd subcommand, returning stdout. Errors carry bd's stderr.
+/// Wait for a command's output, stopping it if it runs past `limit`.
+fn output_within(mut cmd: Command, limit: Duration) -> Result<std::process::Output> {
+    let child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let pid = child.id();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+    match rx.recv_timeout(limit) {
+        Ok(out) => Ok(out?),
+        Err(_) => {
+            let _ = Command::new("/bin/kill")
+                .args(["-KILL", &pid.to_string()])
+                .status();
+            bail!("timed out after {}s", limit.as_secs_f32())
+        }
+    }
+}
+
+/// Run a bd subcommand, returning stdout. Errors carry bd's stderr. A call
+/// that takes longer than `BD_TIMEOUT` is stopped and reported.
 pub fn run(scope: Scope, args: &[&str]) -> Result<String> {
     let mut cmd = command(scope);
     cmd.args(args);
-    let out = cmd
-        .output()
-        .with_context(|| format!("failed to spawn bd {}", args.join(" ")))?;
+    let out = output_within(cmd, BD_TIMEOUT).with_context(|| format!("bd {}", args.join(" ")))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         bail!("bd {}: {}", args.join(" "), err.trim());
@@ -399,6 +427,20 @@ mod tests {
             vec!["update", "x-1", "--priority=0", "--description="]
         );
         assert_eq!(update_args("x-1", &before, &before), vec!["update", "x-1"]);
+    }
+
+    #[test]
+    fn a_hung_command_is_stopped_at_the_limit() {
+        let mut cmd = Command::new("sleep");
+        cmd.arg("5");
+        let started = std::time::Instant::now();
+        let err = output_within(cmd, Duration::from_millis(200)).unwrap_err();
+        assert!(err.to_string().contains("timed out"));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let mut ok = Command::new("echo");
+        ok.arg("hi");
+        let out = output_within(ok, Duration::from_secs(5)).unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hi");
     }
 
     #[test]

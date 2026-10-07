@@ -16,10 +16,12 @@
 //!
 //! Full reloads run here and reach the board as a `Snapshot`. Records applied
 //! while one was loading are applied again on top (see `App::apply_snapshot`).
+//! The board's own reloads (`r`, scope, closed, startup) and its detail pane
+//! (`bd show`) are loaded here too, so the UI thread never waits on bd.
 
 use super::events::{last_seq, seq_of, truncated_head, Record};
 use super::types::Bead;
-use super::{blocked, command, dolt_mode, load, manifests, mark_blocked, run, serve};
+use super::{blocked, command, dolt_mode, load, manifests, mark_blocked, run, serve, show};
 use crate::model::Scope;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
@@ -42,13 +44,23 @@ pub enum Signal {
     Record(Box<Record>),
     Snapshot(Box<Snapshot>),
     Blocked(Box<BlockedState>),
-    /// This workspace's `bd serve` base URL, or None once it is gone.
-    Serve(Option<String>),
+    /// A load failed; the board keeps what it has and shows the error.
+    LoadFailed {
+        scope: Scope,
+        error: String,
+    },
+    /// A bead for the detail pane (`bd show`).
+    Detail {
+        scope: Scope,
+        id: String,
+        bead: Option<Box<Bead>>,
+    },
 }
 
 /// A full reload. Records after `after_seq` may already be on the board and
 /// are applied again on top.
 pub struct Snapshot {
+    pub scope: Scope,
     pub beads: Vec<Bead>,
     pub after_seq: u64,
     /// Whether closed beads were loaded; a snapshot that no longer matches
@@ -178,11 +190,21 @@ impl Shared {
             Some(base) => serve::list(base, show_closed),
             None => load(Scope::Repo, show_closed),
         };
-        let Ok(mut beads) = beads else { return };
+        let mut beads = match beads {
+            Ok(b) => b,
+            Err(e) => {
+                self.send(Signal::LoadFailed {
+                    scope: Scope::Repo,
+                    error: e.to_string(),
+                });
+                return;
+            }
+        };
         if let Ok(b) = blocked(Scope::Repo) {
             mark_blocked(&mut beads, &b);
         }
         self.send(Signal::Snapshot(Box::new(Snapshot {
+            scope: Scope::Repo,
             beads,
             after_seq,
             show_closed,
@@ -228,11 +250,9 @@ impl Shared {
     }
 
     pub(super) fn set_serve_url(&self, base: Option<&str>) {
-        let base = base.map(String::from);
         if let Ok(mut u) = self.serve_url.lock() {
-            u.clone_from(&base);
+            *u = base.map(String::from);
         }
-        self.send(Signal::Serve(base));
     }
 
     /// Start watching for unjournaled changes, once.
@@ -305,16 +325,45 @@ impl Watcher {
         self.shared.show_closed.store(on, Ordering::Relaxed);
     }
 
-    /// Ask for fresh blocked state, e.g. after the board reloaded on its own.
-    pub fn refresh_blocked(&self) {
+    /// Reload the board for `scope` in the background. Repo loads go through
+    /// the snapshot path, which replays records that arrive meanwhile; the
+    /// global scope has no journal to follow.
+    pub fn request_load(&self, scope: Scope) {
         let sh = Arc::clone(&self.shared);
-        thread::spawn(move || sh.load_blocked());
+        thread::spawn(move || {
+            if scope == Scope::Repo {
+                return sh.snapshot();
+            }
+            let show_closed = sh.show_closed.load(Ordering::Relaxed);
+            let signal = match load(scope, show_closed) {
+                Ok(beads) => Signal::Snapshot(Box::new(Snapshot {
+                    scope,
+                    beads,
+                    after_seq: u64::MAX,
+                    show_closed,
+                    reset: false,
+                })),
+                Err(e) => Signal::LoadFailed {
+                    scope,
+                    error: e.to_string(),
+                },
+            };
+            sh.send(signal);
+        });
     }
 
-    /// Ask for a full reload in the background.
-    pub fn request_snapshot(&self) {
+    /// Load one bead for the detail pane in the background.
+    pub fn request_show(&self, scope: Scope, id: String) {
         let sh = Arc::clone(&self.shared);
-        thread::spawn(move || sh.snapshot());
+        thread::spawn(move || {
+            let url = sh.serve_url.lock().ok().and_then(|u| u.clone());
+            let shown = match (&url, scope) {
+                (Some(base), Scope::Repo) => serve::show(base, &id),
+                _ => show(scope, &id),
+            };
+            let bead = shown.ok().flatten().map(Box::new);
+            sh.send(Signal::Detail { scope, id, bead });
+        });
     }
 }
 
