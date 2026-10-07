@@ -69,21 +69,15 @@ pub fn parse_list(s: &str) -> Result<Vec<Bead>> {
 
 // ---------------------------------------------------------------- reads
 
-/// The full board: `bd list`, augmented with closed issues when asked (bd's
-/// default list omits some done states depending on config).
+/// The full board: `bd list`, with closed issues when asked. `--all` gets
+/// both in one call, so a failure is reported instead of half a board.
 pub fn load(scope: Scope, include_closed: bool) -> Result<Vec<Bead>> {
-    let mut beads = parse_list(&run(scope, &["list", "--json"])?)?;
-    if include_closed {
-        // Best-effort: merge in closed issues. Ignore if the flag is rejected.
-        if let Ok(s) = run(scope, &["list", "--status", "closed", "--json"]) {
-            if let Ok(extra) = parse_list(&s) {
-                let have: std::collections::HashSet<_> =
-                    beads.iter().map(|b| b.id.clone()).collect();
-                beads.extend(extra.into_iter().filter(|b| !have.contains(&b.id)));
-            }
-        }
-    }
-    Ok(beads)
+    let args: &[&str] = if include_closed {
+        &["list", "--json", "--all"]
+    } else {
+        &["list", "--json"]
+    };
+    parse_list(&run(scope, args)?)
 }
 
 pub fn show(scope: Scope, id: &str) -> Result<Option<Bead>> {
@@ -234,6 +228,9 @@ fn create_args(nb: &NewBead) -> Vec<String> {
         flag("description", desc),
         "--silent".to_string(),
     ];
+    if nb.deferred {
+        args.push(flag("status", "deferred"));
+    }
     if !nb.assignee.is_empty() {
         args.push(flag("assignee", &nb.assignee));
     }
@@ -246,13 +243,10 @@ fn create_args(nb: &NewBead) -> Vec<String> {
     args
 }
 
-/// Create a bead from a fully-specified form; returns the new id.
+/// Create a bead from a fully-specified form; returns the new id. The
+/// backlog toggle sets its status in the same call.
 pub fn create(scope: Scope, nb: &NewBead) -> Result<String> {
-    let id = run_args(scope, &create_args(nb))?.trim().to_string();
-    if nb.deferred && !id.is_empty() {
-        let _ = set_status(scope, &id, "deferred"); // best-effort → backlog
-    }
-    Ok(id)
+    Ok(run_args(scope, &create_args(nb))?.trim().to_string())
 }
 
 fn update_args(id: &str, nb: &NewBead) -> Vec<String> {
@@ -263,6 +257,9 @@ fn update_args(id: &str, nb: &NewBead) -> Vec<String> {
         flag("type", &nb.issue_type),
         flag("priority", &nb.priority.to_string()),
     ];
+    if nb.deferred {
+        args.push(flag("status", "deferred"));
+    }
     if !nb.description.is_empty() {
         args.push(flag("description", &nb.description));
     }
@@ -283,11 +280,7 @@ fn update_args(id: &str, nb: &NewBead) -> Vec<String> {
 /// untouched field never wipes existing data. Status is left alone unless the
 /// backlog toggle is on.
 pub fn update_bead(scope: Scope, id: &str, nb: &NewBead) -> Result<()> {
-    run_args(scope, &update_args(id, nb))?;
-    if nb.deferred {
-        let _ = set_status(scope, id, "deferred");
-    }
-    Ok(())
+    run_args(scope, &update_args(id, nb)).map(|_| ())
 }
 
 #[cfg(test)]
@@ -363,9 +356,20 @@ mod tests {
         assert!(create.contains(&"--labels=-lab".to_string()));
         // Every argument after the subcommand is a `--name=value` flag.
         assert!(create[1..].iter().all(|a| a.starts_with("--")));
+        assert!(!create.contains(&"--status=deferred".to_string()));
         let update = update_args("x-1", &dashed());
         assert!(update.contains(&"--title=-starts with dash".to_string()));
         assert!(update.contains(&"--set-labels=-lab".to_string()));
+    }
+
+    #[test]
+    fn backlog_is_set_in_the_same_call() {
+        let nb = NewBead {
+            deferred: true,
+            ..dashed()
+        };
+        assert!(create_args(&nb).contains(&"--status=deferred".to_string()));
+        assert!(update_args("x-1", &nb).contains(&"--status=deferred".to_string()));
     }
 
     #[test]
