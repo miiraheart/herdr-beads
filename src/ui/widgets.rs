@@ -3,7 +3,7 @@
 use crate::app::App;
 use crate::form::CreateForm;
 use crate::keys::help_lines;
-use crate::model::{status_label, Mode, View};
+use crate::model::{status_label, Mode, Scope, View};
 use crate::ui::theme;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -72,6 +72,9 @@ pub fn render_activity_bar(f: &mut Frame, area: Rect, app: &mut App) {
     }
     if app.auto_dock_enabled() {
         right.push_str(" +auto");
+    }
+    if app.live && app.scope == Scope::Repo {
+        right.push_str(" +live");
     }
     if !app.filter.is_empty() {
         right.push_str(&format!("  /{}", app.filter));

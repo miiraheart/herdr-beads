@@ -47,7 +47,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         let Some(b) = app.beads.iter().find(|x| x.id == id) else {
             continue;
         };
-        let line = Line::from(vec![
+        let mut spans = vec![
             Span::raw("  "),
             Span::styled(
                 format!("{:<id_w$} ", truncate(&b.id, id_w), id_w = id_w),
@@ -82,12 +82,13 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
                 format!("{:<asg_w$} ", truncate(b.assignee(), asg_w), asg_w = asg_w),
                 Style::default().fg(theme::OVERLAY0),
             ),
-            Span::styled(
-                truncate_soft(&b.title, title_w),
-                Style::default().fg(theme::TEXT),
-            ),
-        ]);
-        lines.push(line);
+        ];
+        spans.extend(theme::blocked_span(b));
+        spans.push(Span::styled(
+            truncate_soft(&b.title, title_w.saturating_sub(theme::blocked_width(b))),
+            Style::default().fg(theme::TEXT),
+        ));
+        lines.push(Line::from(spans));
         ids.push(Some(id));
     }
 

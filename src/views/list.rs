@@ -20,7 +20,9 @@ pub fn bead_line(b: &Bead, width: u16) -> Line<'static> {
     } else {
         0
     };
-    let title_w = (width as usize).saturating_sub(21 + dep_w).max(6);
+    let title_w = (width as usize)
+        .saturating_sub(21 + dep_w + theme::blocked_width(b))
+        .max(6);
     let mut spans = vec![
         Span::raw("  "),
         Span::styled(
@@ -35,11 +37,12 @@ pub fn bead_line(b: &Bead, width: u16) -> Line<'static> {
             format!("{:<13} ", truncate_soft(&b.id, 13)),
             Style::default().fg(theme::OVERLAY1),
         ),
-        Span::styled(
-            truncate_soft(&b.title, title_w),
-            Style::default().fg(theme::TEXT),
-        ),
     ];
+    spans.extend(theme::blocked_span(b));
+    spans.push(Span::styled(
+        truncate_soft(&b.title, title_w),
+        Style::default().fg(theme::TEXT),
+    ));
     if b.dependency_count > 0 {
         spans.push(Span::styled(
             format!(" ⛓{}", b.dependency_count),

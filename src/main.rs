@@ -2,6 +2,7 @@
 //! bd issues, docked as a side panel or floating as a popup.
 
 mod app;
+mod app_live;
 mod bd;
 mod form;
 mod input;
@@ -10,8 +11,10 @@ mod model;
 mod selftest;
 mod ui;
 mod views;
+mod writer;
 
 use crate::app::App;
+use crate::bd::live::{Signal, Watcher};
 use crate::model::{Mode, Scope};
 use anyhow::Result;
 use ratatui::backend::{Backend, CrosstermBackend};
@@ -24,6 +27,7 @@ use ratatui::crossterm::terminal::{
 };
 use ratatui::Terminal;
 use std::io;
+use std::time::Duration;
 
 fn parse_args() -> (Mode, Scope, bool) {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -149,15 +153,39 @@ fn main() -> Result<()> {
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
+    // The journal is per workspace, so live updates follow the repo scope only.
+    let watcher = Watcher::start(app.show_closed);
     loop {
         terminal.draw(|f| ui::render(f, &mut app))?;
         if app.should_quit {
             break;
         }
-        match event::read()? {
-            Event::Key(k) if k.kind == KeyEventKind::Press => keys::handle_key(&mut app, k),
-            Event::Mouse(m) => keys::handle_mouse(&mut app, m),
-            _ => {}
+        // Wake up regularly so changes made elsewhere show without a keypress.
+        if event::poll(Duration::from_millis(250))? {
+            match event::read()? {
+                Event::Key(k) if k.kind == KeyEventKind::Press => keys::handle_key(&mut app, k),
+                Event::Mouse(m) => keys::handle_mouse(&mut app, m),
+                _ => {}
+            }
+        }
+        app.finish_writes();
+        watcher.set_show_closed(app.show_closed);
+        let repo = app.scope == Scope::Repo;
+        for signal in watcher.poll() {
+            match signal {
+                Signal::Live(on) => app.live = on,
+                Signal::Serve(base) => app.serve = base,
+                Signal::Record(rec) if repo => app.apply_record(*rec),
+                Signal::Snapshot(snap) if repo => app.apply_snapshot(*snap),
+                Signal::Blocked(state) if repo => app.apply_blocked(*state),
+                _ => {}
+            }
+        }
+        if app.take_blocked_stale() && repo {
+            watcher.refresh_blocked();
+        }
+        if app.take_snapshot_wanted() && repo {
+            watcher.request_snapshot();
         }
         if app.should_quit {
             break;

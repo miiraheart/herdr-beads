@@ -100,3 +100,18 @@ pub fn type_color(t: &str) -> Color {
         _ => OVERLAY0,
     }
 }
+
+/// The marker before the title of a bead blocked by another bead.
+pub fn blocked_span(b: &crate::bd::types::Bead) -> Option<ratatui::text::Span<'static>> {
+    b.is_blocked
+        .then(|| ratatui::text::Span::styled("⛔ ", ratatui::style::Style::default().fg(RED)))
+}
+
+/// Columns taken by `blocked_span` (the glyph is two cells wide).
+pub fn blocked_width(b: &crate::bd::types::Bead) -> usize {
+    if b.is_blocked {
+        3
+    } else {
+        0
+    }
+}

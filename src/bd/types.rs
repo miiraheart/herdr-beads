@@ -17,7 +17,7 @@ pub struct Dependency {
     pub issue_id: Option<String>,
     #[serde(default)]
     pub depends_on_id: Option<String>,
-    #[serde(rename = "type", default)]
+    #[serde(rename = "type", alias = "dependency_type", default)]
     pub dep_type: Option<String>,
     // expanded form (show): a full issue
     #[serde(default)]
@@ -76,6 +76,13 @@ pub struct Bead {
     pub dependent_count: u32,
     #[serde(default)]
     pub comment_count: u32,
+    /// Blocked by another bead, directly or through a parent. Comes from
+    /// `bd blocked` on load and from events after that; bd omits it when false.
+    #[serde(default)]
+    pub is_blocked: bool,
+    /// The beads blocking this one, as last reported by `bd blocked`.
+    #[serde(default)]
+    pub blocked_by: Vec<String>,
 }
 
 fn default_status() -> String {

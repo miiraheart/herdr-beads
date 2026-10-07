@@ -71,13 +71,13 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
                     ),
                 ]));
                 ids.push(Some(id.clone()));
-                lines.push(Line::from(vec![
-                    Span::raw(" "),
-                    Span::styled(
-                        truncate_soft(&b.title, cw.saturating_sub(2)),
-                        Style::default().fg(theme::TEXT),
-                    ),
-                ]));
+                let mut title = vec![Span::raw(" ")];
+                title.extend(theme::blocked_span(b));
+                title.push(Span::styled(
+                    truncate_soft(&b.title, cw.saturating_sub(2 + theme::blocked_width(b))),
+                    Style::default().fg(theme::TEXT),
+                ));
+                lines.push(Line::from(title));
                 ids.push(Some(id.clone()));
                 lines.push(Line::raw(""));
                 ids.push(None);
