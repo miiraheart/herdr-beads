@@ -2,12 +2,14 @@
 //! in `ui`/`views`; this module owns state, navigation, and mutations.
 
 use crate::bd;
+use crate::bd::events::Record;
 use crate::bd::types::Bead;
 use crate::form::CreateForm;
 use crate::input::{Input, InputKind};
 use crate::model::{status_rank, Mode, Scope, SortKey, View, STATUS_ORDER};
+use crate::writer::Writer;
 use ratatui::layout::Rect;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Rects captured during render for mouse hit-testing.
 #[derive(Default)]
@@ -48,6 +50,18 @@ pub struct App {
     /// Rows of the last rendered body, so page motions match what you see.
     pub viewport_rows: u16,
     pub status_msg: String,
+    /// bd's events journal is being followed, so the board updates by itself.
+    pub live: bool,
+    /// This workspace's `bd serve` base URL, when it runs one (server mode).
+    pub serve: Option<String>,
+    /// Records applied recently, replayed on top of a background reload.
+    pub recent: VecDeque<Record>,
+    /// Blocked state needs reloading (after a reload that did not include it).
+    pub blocked_stale: bool,
+    /// A record could not be applied; reload in full in the background.
+    pub snapshot_wanted: bool,
+    /// Runs bd writes in the background.
+    pub writer: Writer,
     pub should_quit: bool,
     pub hits: Hits,
 }
@@ -75,6 +89,12 @@ impl App {
             g_pending: false,
             viewport_rows: 20,
             status_msg: String::new(),
+            live: false,
+            serve: None,
+            recent: VecDeque::new(),
+            blocked_stale: false,
+            snapshot_wanted: false,
+            writer: Writer::start(),
             should_quit: false,
             hits: Hits::default(),
         };
@@ -85,10 +105,19 @@ impl App {
     // ---------------------------------------------------------- data
 
     pub fn reload(&mut self) {
-        match bd::load(self.scope, self.show_closed) {
-            Ok(b) => {
-                self.status_msg = format!("{} beads · {}", b.len(), self.scope.label());
+        let pos = self.selected_pos();
+        let loaded = match (&self.serve, self.scope) {
+            (Some(base), Scope::Repo) => bd::serve::list(base, self.show_closed),
+            _ => bd::load(self.scope, self.show_closed),
+        };
+        match loaded {
+            Ok(mut b) => {
+                // `bd list` has no blocked state: keep what we knew until the
+                // background refresh brings the current one.
+                self.carry_blocked(&mut b);
+                self.blocked_stale = true;
                 self.beads = b;
+                self.status_msg = self.count_msg();
             }
             Err(e) => {
                 let first = e.to_string().lines().next().unwrap_or("").to_string();
@@ -104,7 +133,7 @@ impl App {
             }
         }
         self.detail_cache.clear();
-        self.ensure_selected();
+        self.reselect_near(pos);
         self.refresh_detail();
     }
 
@@ -194,7 +223,28 @@ impl App {
 
     // ---------------------------------------------------------- selection
 
-    fn ensure_selected(&mut self) {
+    /// Where the selection sits in the current order.
+    pub(crate) fn selected_pos(&self) -> Option<usize> {
+        let id = self.selected.as_ref()?;
+        self.flat_order().iter().position(|o| o == id)
+    }
+
+    /// Keep the selection after the beads changed. When its bead left the
+    /// view (closed, deleted, filtered), take the bead now at its place
+    /// instead of jumping back to the top.
+    pub(crate) fn reselect_near(&mut self, pos: Option<usize>) {
+        let order = self.flat_order();
+        if self.selected.as_ref().is_some_and(|id| order.contains(id)) {
+            return;
+        }
+        let last = order.len().saturating_sub(1);
+        self.selected = pos
+            .and_then(|p| order.get(p.min(last)))
+            .or_else(|| order.first())
+            .cloned();
+    }
+
+    pub(crate) fn ensure_selected(&mut self) {
         let order = self.flat_order();
         let ok = self
             .selected
@@ -214,19 +264,31 @@ impl App {
     /// The bead to show in the detail pane, enriched by `bd show` when cached.
     pub fn detail_bead(&self) -> Option<Bead> {
         let id = self.selected.as_ref()?;
-        self.detail_cache
+        let board = self.selected_bead();
+        let mut b = self
+            .detail_cache
             .get(id)
             .cloned()
-            .or_else(|| self.selected_bead().cloned())
+            .or_else(|| board.cloned())?;
+        // `bd show` has no blocked state; the board's copy does.
+        if let Some(board) = board {
+            b.is_blocked = board.is_blocked;
+            b.blocked_by = board.blocked_by.clone();
+        }
+        Some(b)
     }
 
-    fn refresh_detail(&mut self) {
+    pub(crate) fn refresh_detail(&mut self) {
         if !(self.show_detail || self.detail_modal) {
             return;
         }
         if let Some(id) = self.selected.clone() {
             if !self.detail_cache.contains_key(&id) {
-                if let Ok(Some(b)) = bd::show(self.scope, &id) {
+                let shown = match (&self.serve, self.scope) {
+                    (Some(base), Scope::Repo) => bd::serve::show(base, &id),
+                    _ => bd::show(self.scope, &id),
+                };
+                if let Ok(Some(b)) = shown {
                     self.detail_cache.insert(id, b);
                 }
             }
@@ -343,21 +405,48 @@ impl App {
 
     // ---------------------------------------------------------- mutations
 
-    fn with_selected<F: Fn(&str) -> anyhow::Result<()>>(&mut self, f: F, ok: &str) {
-        if let Some(id) = self.selected.clone() {
-            match f(&id) {
-                Ok(()) => {
-                    self.status_msg = ok.to_string();
-                    self.reload();
+    /// Run a bd write in the background, showing `pending` until it is done
+    /// (see `finish_writes`).
+    fn write(
+        &mut self,
+        pending: String,
+        job: impl FnOnce(Scope) -> anyhow::Result<String> + Send + 'static,
+    ) {
+        self.status_msg = pending;
+        let scope = self.scope;
+        self.writer.submit(move || job(scope), None);
+    }
+
+    /// Take finished writes. With live updates on, the journal brings the
+    /// change; otherwise the board reloads in the background.
+    pub fn finish_writes(&mut self) {
+        for done in self.writer.poll() {
+            match done.result {
+                Ok(msg) => {
+                    self.status_msg = msg;
+                    if self.scope == Scope::Global {
+                        self.reload();
+                    } else if !self.live {
+                        self.snapshot_wanted = true;
+                    }
                 }
-                Err(e) => self.status_msg = format!("bd error: {e}"),
+                Err(e) => {
+                    self.status_msg = format!("bd error: {e}");
+                    if done.form.is_some() {
+                        self.create_form = done.form;
+                    }
+                }
             }
         }
     }
 
     pub fn claim_selected(&mut self) {
-        let scope = self.scope;
-        self.with_selected(|id| bd::claim(scope, id), "claimed");
+        let Some(id) = self.selected.clone() else {
+            return;
+        };
+        self.write("claiming...".into(), move |scope| {
+            bd::claim(scope, &id).map(|_| "claimed".into())
+        });
     }
 
     /// Toggle this pane between docked and fullscreen via herdr's native zoom.
@@ -401,15 +490,9 @@ impl App {
             return;
         }
         let target = statuses[ni].clone();
-        match bd::set_status(self.scope, &id, &target) {
-            Ok(()) => {
-                self.status_msg = format!("→ {target}");
-                self.reload();
-                self.selected = Some(id);
-                self.ensure_selected();
-            }
-            Err(e) => self.status_msg = format!("bd error: {e}"),
-        }
+        self.write(format!("→ {target}..."), move |scope| {
+            bd::set_status(scope, &id, &target).map(|_| format!("→ {target}"))
+        });
     }
 
     // ---------------------------------------------------------- input
@@ -461,13 +544,9 @@ impl App {
         let Some(id) = self.selected.clone() else {
             return;
         };
-        match bd::set_status(self.scope, &id, &status) {
-            Ok(_) => {
-                self.status_msg = format!("-> {status}");
-                self.reload();
-            }
-            Err(e) => self.status_msg = format!("bd error: {e}"),
-        }
+        self.write(format!("-> {status}..."), move |scope| {
+            bd::set_status(scope, &id, &status).map(|_| format!("-> {status}"))
+        });
     }
 
     /// Focus the selected bead's status group: collapse every other group, or
@@ -506,33 +585,30 @@ impl App {
             self.create_form = Some(f);
             return;
         }
-        // Scope `nb` (which borrows `f`) so it drops before we may move `f` back.
-        let result = {
-            let nb = bd::NewBead {
-                title: &title,
-                issue_type: f.issue_type(),
-                priority: f.priority,
-                description: f.description.trim(),
-                assignee: f.assignee.trim(),
-                parent: f.parent_id(),
-                labels: f.labels.trim(),
-                deferred: f.deferred,
-            };
-            match &f.edit_id {
-                Some(id) => bd::update_bead(self.scope, id, &nb).map(|_| format!("updated {id}")),
-                None => bd::create(self.scope, &nb).map(|_| format!("created {}", f.issue_type())),
-            }
+        let scope = self.scope;
+        let nb = bd::NewBead {
+            title,
+            issue_type: f.issue_type().to_string(),
+            priority: f.priority,
+            description: f.description.trim().to_string(),
+            assignee: f.assignee.trim().to_string(),
+            parent: f.parent_id().to_string(),
+            labels: f.labels.trim().to_string(),
+            deferred: f.deferred,
         };
-        match result {
-            Ok(msg) => {
-                self.status_msg = msg;
-                self.reload();
-            }
-            Err(e) => {
-                self.status_msg = format!("bd error: {e}");
-                self.create_form = Some(f);
-            }
-        }
+        let pending = match &f.edit_id {
+            Some(id) => format!("updating {id}..."),
+            None => "creating...".to_string(),
+        };
+        let edit_id = f.edit_id.clone();
+        self.status_msg = pending;
+        self.writer.submit(
+            move || match edit_id {
+                Some(id) => bd::update_bead(scope, &id, &nb).map(|_| format!("updated {id}")),
+                None => bd::create(scope, &nb).map(|_| format!("created {}", nb.issue_type)),
+            },
+            Some(f),
+        );
     }
 
     pub fn open_input(&mut self, kind: InputKind) {
@@ -570,46 +646,34 @@ impl App {
                     self.open_input(InputKind::CloseReason(id));
                     return;
                 }
-                match bd::close(self.scope, &id, &buf) {
-                    Ok(()) => {
-                        self.status_msg = "closed".into();
-                        self.reload();
-                    }
-                    Err(e) => self.status_msg = format!("bd error: {e}"),
+                // The bead leaves the board, so its detail popup goes too.
+                if self.selected.as_deref() == Some(id.as_str()) {
+                    self.detail_modal = false;
                 }
+                self.write("closing...".into(), move |scope| {
+                    bd::close(scope, &id, &buf).map(|_| "closed".into())
+                });
             }
             InputKind::Note(id) => {
                 if !buf.is_empty() {
-                    match bd::add_note(self.scope, &id, &buf) {
-                        Ok(()) => {
-                            self.status_msg = "noted".into();
-                            self.detail_cache.remove(&id);
-                            self.refresh_detail();
-                        }
-                        Err(e) => self.status_msg = format!("bd error: {e}"),
-                    }
+                    self.write("noting...".into(), move |scope| {
+                        bd::add_note(scope, &id, &buf).map(|_| "noted".into())
+                    });
                 }
             }
             InputKind::Priority(id) => match buf.parse::<u8>() {
-                Ok(p) if p <= 4 => match bd::set_priority(self.scope, &id, p) {
-                    Ok(()) => {
-                        self.status_msg = format!("priority {p}");
-                        self.reload();
-                    }
-                    Err(e) => self.status_msg = format!("bd error: {e}"),
-                },
+                Ok(p) if p <= 4 => {
+                    self.write(format!("priority {p}..."), move |scope| {
+                        bd::set_priority(scope, &id, p).map(|_| format!("priority {p}"))
+                    });
+                }
                 _ => self.status_msg = "priority must be 0-4".into(),
             },
             InputKind::Comment(id) => {
                 if !buf.is_empty() {
-                    match bd::add_comment(self.scope, &id, &buf) {
-                        Ok(()) => {
-                            self.status_msg = "commented".into();
-                            self.detail_cache.remove(&id);
-                            self.refresh_detail();
-                        }
-                        Err(e) => self.status_msg = format!("bd error: {e}"),
-                    }
+                    self.write("commenting...".into(), move |scope| {
+                        bd::add_comment(scope, &id, &buf).map(|_| "commented".into())
+                    });
                 }
             }
         }

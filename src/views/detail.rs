@@ -60,6 +60,18 @@ pub fn build_lines(b: &Bead) -> Vec<Line<'static>> {
         )));
         lines.push(Line::raw(""));
     }
+    if b.is_blocked {
+        let by = if b.blocked_by.is_empty() {
+            "another bead".to_string()
+        } else {
+            b.blocked_by.join(", ")
+        };
+        lines.push(Line::from(Span::styled(
+            format!("⛔ Blocked by: {by}"),
+            Style::default().fg(theme::RED),
+        )));
+        lines.push(Line::raw(""));
+    }
     if !b.dependencies.is_empty() {
         lines.push(Line::from(Span::styled(
             format!("Dependencies ({})", b.dependencies.len()),

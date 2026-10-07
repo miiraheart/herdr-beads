@@ -141,6 +141,12 @@ The plugin also exposes its actions in herdr's command palette: **Beads: toggle 
 
 - **Keybindings** live in `~/.config/herdr/config.toml` (see above).
 - **Auto-open the dock in new tabs** (off by default): press `A` in the board. The activity bar shows `+auto` while it is on, and a `tab.created` hook then opens the dock in each new tab, docked left and narrowed, without moving your focus out of the tab you are in. Press `A` again to stop. The setting lives in the plugin config directory, so it survives restarts and applies to the next tab with no reload. Only the dock does this: the floating board is a herdr popup, and a session has just one popup, not one per tab.
+- **Live updates** (bd 1.3+, off by default): run `bd config set events-journal true` in a repo and the board keeps itself current. Each change recorded in bd's events journal is applied as it arrives, using the bead state the record carries, so a change made outside the board shows up within a second or two, with no reload. The activity bar shows `+live` while the board is following.
+  - **Embedded repos** (bd's default) follow `bd events tail --follow`. **Server-mode repos** get their own `bd serve` on a free loopback port; the board reads and follows events over HTTP and stops it on exit. Changes made from the board still go through the `bd` CLI, so repo hooks keep running.
+  - If the follower stops, it resumes from the last record it delivered. If bd reports that point as pruned, the board reloads in full and continues from the current head.
+  - Changes the journal does not record, such as a `bd dolt pull` or a merge, are noticed through Dolt's manifest file and trigger a full reload in the background.
+  - With an older bd or the journal off, the board loads on open, after its own changes, and on `r`, as before.
+- **Blocked beads**: a bead blocked by another bead, directly or through its parent, shows a red ⛔ before its title, and the detail pane lists what blocks it. It stays in its status column. This comes from `bd blocked` (loaded in the background) and, with live updates on, from the journal.
 - **Scope**: `S` toggles between the window's repo `.beads` and `bd --global`. Global requires a bd shared-server database (`BEADS_DOLT_SHARED_SERVER=1`); without one the board says so and stays on repo scope.
 - **Theme**: a fixed Catppuccin-Macchiato accent palette on a transparent background, so it blends with any terminal theme.
 
