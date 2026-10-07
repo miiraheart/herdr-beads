@@ -1,7 +1,7 @@
 //! The board's side of live updates: applying journal records, background
 //! reloads and blocked state from `bd::live`.
 
-use crate::app::App;
+use crate::app::{App, LOADING};
 use crate::bd::events::{self, Record};
 use crate::bd::live::{BlockedState, Snapshot};
 use crate::bd::mark_blocked;
@@ -42,7 +42,7 @@ impl App {
             self.recent.clear();
         }
         let was_count = self.status_msg.is_empty()
-            || self.status_msg == "loading..."
+            || self.status_msg == LOADING
             || self.status_msg == self.count_msg();
         let pos = self.selected_pos();
         self.beads = snap.beads;

@@ -8,6 +8,9 @@ use crate::form::CreateForm;
 use crate::input::{Input, InputKind};
 use crate::model::{status_rank, Mode, Scope, SortKey, View, STATUS_ORDER};
 use crate::writer::Writer;
+
+/// The status line while a reload runs in the background.
+pub const LOADING: &str = "loading...";
 use ratatui::layout::Rect;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -117,9 +120,10 @@ impl App {
     /// Reload the board in the background (see `App::apply_snapshot`).
     pub fn reload(&mut self) {
         self.reload_wanted = true;
-        self.status_msg = "loading...".into();
+        self.status_msg = LOADING.into();
         self.detail_cache.clear();
     }
+
     fn passes_filter(&self, b: &Bead) -> bool {
         self.filter.is_empty() || b.haystack().contains(&self.filter.to_lowercase())
     }
@@ -273,6 +277,7 @@ impl App {
             }
         }
     }
+
     fn locate_kanban(&self, id: &str) -> Option<(usize, usize)> {
         for (ci, (_s, ids)) in self.columns().iter().enumerate() {
             if let Some(ri) = ids.iter().position(|x| x == id) {
@@ -578,9 +583,12 @@ impl App {
         self.writer.submit(
             move || match (edit_id, before) {
                 (Some(id), Some(before)) => {
-                    bd::update_bead(scope, &id, &nb, &before).map(|saved| match saved {
-                        true => format!("updated {id}"),
-                        false => "no changes".to_string(),
+                    bd::update_bead(scope, &id, &nb, &before).map(|saved| {
+                        if saved {
+                            format!("updated {id}")
+                        } else {
+                            "no changes".to_string()
+                        }
                     })
                 }
                 _ => bd::create(scope, &nb).map(|_| format!("created {}", nb.issue_type)),
