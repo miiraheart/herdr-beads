@@ -169,9 +169,22 @@ pub fn manifests() -> Vec<PathBuf> {
 }
 
 // ---------------------------------------------------------------- writes
+//
+// Free text (titles, notes, reasons, labels...) can start with `-`, which bd
+// would read as a flag. Flags are passed as `--name=value`, and note/comment
+// text after `--`, so any text reaches bd as data.
+
+fn flag(name: &str, value: &str) -> String {
+    format!("--{name}={value}")
+}
+
+fn run_args(scope: Scope, args: &[String]) -> Result<String> {
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    run(scope, &args)
+}
 
 pub fn set_status(scope: Scope, id: &str, status: &str) -> Result<()> {
-    run(scope, &["update", id, "-s", status]).map(|_| ())
+    run(scope, &["update", id, &flag("status", status)]).map(|_| ())
 }
 
 pub fn claim(scope: Scope, id: &str) -> Result<()> {
@@ -179,7 +192,7 @@ pub fn claim(scope: Scope, id: &str) -> Result<()> {
 }
 
 pub fn close(scope: Scope, id: &str, reason: &str) -> Result<()> {
-    run(scope, &["close", id, "-r", reason]).map(|_| ())
+    run(scope, &["close", id, &flag("reason", reason)]).map(|_| ())
 }
 
 pub fn set_priority(scope: Scope, id: &str, priority: u8) -> Result<()> {
@@ -188,11 +201,11 @@ pub fn set_priority(scope: Scope, id: &str, priority: u8) -> Result<()> {
 }
 
 pub fn add_note(scope: Scope, id: &str, note: &str) -> Result<()> {
-    run(scope, &["note", id, note]).map(|_| ())
+    run(scope, &["note", id, "--", note]).map(|_| ())
 }
 
 pub fn add_comment(scope: Scope, id: &str, text: &str) -> Result<()> {
-    run(scope, &["comment", id, text]).map(|_| ())
+    run(scope, &["comment", id, "--", text]).map(|_| ())
 }
 
 pub struct NewBead {
@@ -206,43 +219,63 @@ pub struct NewBead {
     pub deferred: bool,
 }
 
-/// Create a bead from a fully-specified form; returns the new id.
-pub fn create(scope: Scope, nb: &NewBead) -> Result<String> {
-    let p = nb.priority.to_string();
+fn create_args(nb: &NewBead) -> Vec<String> {
     // --description is mandatory by convention; seed from title if blank.
     let desc = if nb.description.is_empty() {
         &nb.title
     } else {
         &nb.description
     };
-    let mut args: Vec<&str> = vec![
-        "create",
-        &nb.title,
-        "-t",
-        &nb.issue_type,
-        "-p",
-        &p,
-        "--description",
-        desc,
-        "--silent",
+    let mut args = vec![
+        "create".to_string(),
+        flag("title", &nb.title),
+        flag("type", &nb.issue_type),
+        flag("priority", &nb.priority.to_string()),
+        flag("description", desc),
+        "--silent".to_string(),
     ];
     if !nb.assignee.is_empty() {
-        args.push("-a");
-        args.push(&nb.assignee);
+        args.push(flag("assignee", &nb.assignee));
     }
     if !nb.parent.is_empty() {
-        args.push("--parent");
-        args.push(&nb.parent);
+        args.push(flag("parent", &nb.parent));
     }
     if !nb.labels.is_empty() {
-        args.push("-l");
-        args.push(&nb.labels);
+        args.push(flag("labels", &nb.labels));
     }
-    let id = run(scope, &args)?.trim().to_string();
+    args
+}
+
+/// Create a bead from a fully-specified form; returns the new id.
+pub fn create(scope: Scope, nb: &NewBead) -> Result<String> {
+    let id = run_args(scope, &create_args(nb))?.trim().to_string();
     if nb.deferred && !id.is_empty() {
         let _ = set_status(scope, &id, "deferred"); // best-effort → backlog
     }
     Ok(id)
+}
+
+fn update_args(id: &str, nb: &NewBead) -> Vec<String> {
+    let mut args = vec![
+        "update".to_string(),
+        id.to_string(),
+        flag("title", &nb.title),
+        flag("type", &nb.issue_type),
+        flag("priority", &nb.priority.to_string()),
+    ];
+    if !nb.description.is_empty() {
+        args.push(flag("description", &nb.description));
+    }
+    if !nb.assignee.is_empty() {
+        args.push(flag("assignee", &nb.assignee));
+    }
+    if !nb.parent.is_empty() {
+        args.push(flag("parent", &nb.parent));
+    }
+    if !nb.labels.is_empty() {
+        args.push(flag("set-labels", &nb.labels));
+    }
+    args
 }
 
 /// Update an existing bead's core fields from an edited form. Optional fields
@@ -250,34 +283,7 @@ pub fn create(scope: Scope, nb: &NewBead) -> Result<String> {
 /// untouched field never wipes existing data. Status is left alone unless the
 /// backlog toggle is on.
 pub fn update_bead(scope: Scope, id: &str, nb: &NewBead) -> Result<()> {
-    let p = nb.priority.to_string();
-    let mut args: Vec<&str> = vec![
-        "update",
-        id,
-        "--title",
-        &nb.title,
-        "-t",
-        &nb.issue_type,
-        "-p",
-        &p,
-    ];
-    if !nb.description.is_empty() {
-        args.push("--description");
-        args.push(&nb.description);
-    }
-    if !nb.assignee.is_empty() {
-        args.push("-a");
-        args.push(&nb.assignee);
-    }
-    if !nb.parent.is_empty() {
-        args.push("--parent");
-        args.push(&nb.parent);
-    }
-    if !nb.labels.is_empty() {
-        args.push("--set-labels");
-        args.push(&nb.labels);
-    }
-    run(scope, &args)?;
+    run_args(scope, &update_args(id, nb))?;
     if nb.deferred {
         let _ = set_status(scope, id, "deferred");
     }
@@ -333,6 +339,33 @@ mod tests {
         let b = parse_list(&format!("[{s}]")).unwrap().remove(0);
         assert_eq!(b.dependencies[0].other_id(), Some("sv-6sc"));
         assert_eq!(b.dependencies[0].dep_type.as_deref(), Some("blocks"));
+    }
+
+    fn dashed() -> NewBead {
+        NewBead {
+            title: "-starts with dash".into(),
+            issue_type: "task".into(),
+            priority: 2,
+            description: "-desc".into(),
+            assignee: "-bob".into(),
+            parent: String::new(),
+            labels: "-lab".into(),
+            deferred: false,
+        }
+    }
+
+    #[test]
+    fn text_starting_with_a_dash_is_passed_as_a_value() {
+        let create = create_args(&dashed());
+        assert!(create.contains(&"--title=-starts with dash".to_string()));
+        assert!(create.contains(&"--description=-desc".to_string()));
+        assert!(create.contains(&"--assignee=-bob".to_string()));
+        assert!(create.contains(&"--labels=-lab".to_string()));
+        // Every argument after the subcommand is a `--name=value` flag.
+        assert!(create[1..].iter().all(|a| a.starts_with("--")));
+        let update = update_args("x-1", &dashed());
+        assert!(update.contains(&"--title=-starts with dash".to_string()));
+        assert!(update.contains(&"--set-labels=-lab".to_string()));
     }
 
     #[test]
