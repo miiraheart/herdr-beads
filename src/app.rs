@@ -508,8 +508,7 @@ impl App {
     }
 
     /// Reopen the create form pre-filled from the selected bead to edit it.
-    /// Labels/parent aren't carried in the list JSON, so they start blank and
-    /// are only written back when set (an untouched field never wipes data).
+    /// Saving sends only the fields that changed (see `bd::update_bead`).
     pub fn open_edit_form(&mut self) {
         let Some(b) = self.selected_bead().cloned() else {
             return;
@@ -523,7 +522,13 @@ impl App {
         let mut f = CreateForm::new(epics);
         f.title = b.title.clone();
         f.description = b.description.clone();
-        f.assignee = b.owner.clone().unwrap_or_default();
+        f.assignee = b.assigned.clone().unwrap_or_default();
+        f.labels = b.labels.join(",");
+        f.epic_idx = b
+            .parent
+            .as_ref()
+            .and_then(|p| f.epics.iter().position(|(id, _)| id == p))
+            .map_or(0, |i| i + 1);
         f.type_idx = crate::form::TYPES
             .iter()
             .position(|t| *t == b.issue_type)
@@ -531,6 +536,7 @@ impl App {
         f.priority = b.priority.min(4);
         f.deferred = b.status == "deferred";
         f.edit_id = Some(b.id.clone());
+        f.before = Some(f.new_bead());
         self.create_form = Some(f);
     }
 
@@ -579,23 +585,14 @@ impl App {
         let Some(f) = self.create_form.take() else {
             return;
         };
-        let title = f.title.trim().to_string();
-        if title.is_empty() {
+        if f.title.trim().is_empty() {
             self.status_msg = "title required".into();
             self.create_form = Some(f);
             return;
         }
         let scope = self.scope;
-        let nb = bd::NewBead {
-            title,
-            issue_type: f.issue_type().to_string(),
-            priority: f.priority,
-            description: f.description.trim().to_string(),
-            assignee: f.assignee.trim().to_string(),
-            parent: f.parent_id().to_string(),
-            labels: f.labels.trim().to_string(),
-            deferred: f.deferred,
-        };
+        let nb = f.new_bead();
+        let before = f.before.clone();
         let pending = match &f.edit_id {
             Some(id) => format!("updating {id}..."),
             None => "creating...".to_string(),
@@ -603,9 +600,14 @@ impl App {
         let edit_id = f.edit_id.clone();
         self.status_msg = pending;
         self.writer.submit(
-            move || match edit_id {
-                Some(id) => bd::update_bead(scope, &id, &nb).map(|_| format!("updated {id}")),
-                None => bd::create(scope, &nb).map(|_| format!("created {}", nb.issue_type)),
+            move || match (edit_id, before) {
+                (Some(id), Some(before)) => {
+                    bd::update_bead(scope, &id, &nb, &before).map(|saved| match saved {
+                        true => format!("updated {id}"),
+                        false => "no changes".to_string(),
+                    })
+                }
+                _ => bd::create(scope, &nb).map(|_| format!("created {}", nb.issue_type)),
             },
             Some(f),
         );

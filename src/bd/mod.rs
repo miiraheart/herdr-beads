@@ -202,6 +202,7 @@ pub fn add_comment(scope: Scope, id: &str, text: &str) -> Result<()> {
     run(scope, &["comment", id, "--", text]).map(|_| ())
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewBead {
     pub title: String,
     pub issue_type: String,
@@ -249,38 +250,44 @@ pub fn create(scope: Scope, nb: &NewBead) -> Result<String> {
     Ok(run_args(scope, &create_args(nb))?.trim().to_string())
 }
 
-fn update_args(id: &str, nb: &NewBead) -> Vec<String> {
-    let mut args = vec![
-        "update".to_string(),
-        id.to_string(),
-        flag("title", &nb.title),
-        flag("type", &nb.issue_type),
-        flag("priority", &nb.priority.to_string()),
-    ];
-    if nb.deferred {
-        args.push(flag("status", "deferred"));
-    }
-    if !nb.description.is_empty() {
-        args.push(flag("description", &nb.description));
-    }
-    if !nb.assignee.is_empty() {
-        args.push(flag("assignee", &nb.assignee));
-    }
-    if !nb.parent.is_empty() {
-        args.push(flag("parent", &nb.parent));
-    }
-    if !nb.labels.is_empty() {
-        args.push(flag("set-labels", &nb.labels));
+/// Arguments for an edit: only the fields that differ from `before`, the
+/// form as it was opened. An emptied field is sent empty, which clears it in
+/// bd; a field left alone is never sent, so it cannot wipe anything.
+fn update_args(id: &str, nb: &NewBead, before: &NewBead) -> Vec<String> {
+    let mut args = vec!["update".to_string(), id.to_string()];
+    let mut changed = |name: &str, now: &str, was: &str| {
+        if now != was {
+            args.push(flag(name, now));
+        }
+    };
+    changed("title", &nb.title, &before.title);
+    changed("type", &nb.issue_type, &before.issue_type);
+    changed(
+        "priority",
+        &nb.priority.to_string(),
+        &before.priority.to_string(),
+    );
+    changed("description", &nb.description, &before.description);
+    changed("assignee", &nb.assignee, &before.assignee);
+    changed("parent", &nb.parent, &before.parent);
+    changed("set-labels", &nb.labels, &before.labels);
+    if nb.deferred != before.deferred {
+        args.push(flag(
+            "status",
+            if nb.deferred { "deferred" } else { "open" },
+        ));
     }
     args
 }
 
-/// Update an existing bead's core fields from an edited form. Optional fields
-/// (description/assignee/parent/labels) are only written when non-empty so an
-/// untouched field never wipes existing data. Status is left alone unless the
-/// backlog toggle is on.
-pub fn update_bead(scope: Scope, id: &str, nb: &NewBead) -> Result<()> {
-    run_args(scope, &update_args(id, nb)).map(|_| ())
+/// Save an edited bead (see `update_args`). Returns false when nothing
+/// changed, in which case bd is not called.
+pub fn update_bead(scope: Scope, id: &str, nb: &NewBead, before: &NewBead) -> Result<bool> {
+    let args = update_args(id, nb, before);
+    if args.len() == 2 {
+        return Ok(false);
+    }
+    run_args(scope, &args).map(|_| true)
 }
 
 #[cfg(test)]
@@ -357,7 +364,14 @@ mod tests {
         // Every argument after the subcommand is a `--name=value` flag.
         assert!(create[1..].iter().all(|a| a.starts_with("--")));
         assert!(!create.contains(&"--status=deferred".to_string()));
-        let update = update_args("x-1", &dashed());
+        let blank = NewBead {
+            title: String::new(),
+            description: String::new(),
+            assignee: String::new(),
+            labels: String::new(),
+            ..dashed()
+        };
+        let update = update_args("x-1", &dashed(), &blank);
         assert!(update.contains(&"--title=-starts with dash".to_string()));
         assert!(update.contains(&"--set-labels=-lab".to_string()));
     }
@@ -369,7 +383,22 @@ mod tests {
             ..dashed()
         };
         assert!(create_args(&nb).contains(&"--status=deferred".to_string()));
-        assert!(update_args("x-1", &nb).contains(&"--status=deferred".to_string()));
+        assert!(update_args("x-1", &nb, &dashed()).contains(&"--status=deferred".to_string()));
+        assert!(update_args("x-1", &dashed(), &nb).contains(&"--status=open".to_string()));
+    }
+
+    #[test]
+    fn edit_sends_only_changed_fields_and_clears_emptied_ones() {
+        let before = dashed();
+        let mut now = before.clone();
+        now.description = String::new();
+        now.priority = 0;
+        let args = update_args("x-1", &now, &before);
+        assert_eq!(
+            args,
+            vec!["update", "x-1", "--priority=0", "--description="]
+        );
+        assert_eq!(update_args("x-1", &before, &before), vec!["update", "x-1"]);
     }
 
     #[test]

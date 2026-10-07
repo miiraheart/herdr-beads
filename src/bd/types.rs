@@ -64,6 +64,13 @@ pub struct Bead {
     pub issue_type: String,
     #[serde(default)]
     pub owner: Option<String>,
+    /// Who the bead is assigned to (`owner` is who created it).
+    #[serde(rename = "assignee", default)]
+    pub assigned: Option<String>,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default)]
+    pub parent: Option<String>,
     #[serde(default)]
     pub created_at: Option<String>,
     #[serde(default)]
