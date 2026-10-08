@@ -109,7 +109,7 @@ impl App {
         let first = error.lines().next().unwrap_or("");
         if scope == Scope::Global && (first.contains("shared-server") || first.contains("--global"))
         {
-            "global needs a shared-server bd DB (not configured) - g = repo".into()
+            "global needs a shared-server bd DB (not configured) - S = repo".into()
         } else {
             format!("bd: {}", first.chars().take(90).collect::<String>())
         }
