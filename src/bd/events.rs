@@ -107,11 +107,23 @@ fn merge(b: &mut Bead, rec: &Record, replay: bool) -> bool {
         b.dependency_count = old.dependency_count;
         b.dependent_count = old.dependent_count;
         b.comment_count = old.comment_count;
+        // Records do not carry the parent; it changes through parent-child deps.
+        b.parent = old.parent;
         if b.is_blocked {
             b.blocked_by = old.blocked_by;
         }
     }
     match (rec.op.as_str(), &rec.dep) {
+        ("dep_add", Some(d)) if d.kind == "parent-child" => {
+            b.parent = Some(d.target.clone());
+            false
+        }
+        ("dep_remove", Some(d)) if d.kind == "parent-child" => {
+            if b.parent.as_deref() == Some(d.target.as_str()) {
+                b.parent = None;
+            }
+            false
+        }
         ("dep_add", Some(d)) => {
             let known = b
                 .dependencies

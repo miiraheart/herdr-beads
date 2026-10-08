@@ -33,6 +33,8 @@ pub struct CreateForm {
     pub epics: Vec<(String, String)>,
     /// Some(id) when the form edits an existing bead; None for a new bead.
     pub edit_id: Option<String>,
+    /// The form as it was opened for an edit, to send only what changed.
+    pub before: Option<crate::bd::NewBead>,
 }
 
 impl CreateForm {
@@ -49,6 +51,21 @@ impl CreateForm {
             field: F_TITLE,
             epics,
             edit_id: None,
+            before: None,
+        }
+    }
+
+    /// The bead the form describes, as bd takes it.
+    pub fn new_bead(&self) -> crate::bd::NewBead {
+        crate::bd::NewBead {
+            title: self.title.trim().to_string(),
+            issue_type: self.issue_type().to_string(),
+            priority: self.priority,
+            description: self.description.trim().to_string(),
+            assignee: self.assignee.trim().to_string(),
+            parent: self.parent_id().to_string(),
+            labels: self.labels.trim().to_string(),
+            deferred: self.deferred,
         }
     }
 

@@ -174,18 +174,19 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
         for signal in watcher.poll() {
             match signal {
                 Signal::Live(on) => app.live = on,
-                Signal::Serve(base) => app.serve = base,
                 Signal::Record(rec) if repo => app.apply_record(*rec),
-                Signal::Snapshot(snap) if repo => app.apply_snapshot(*snap),
                 Signal::Blocked(state) if repo => app.apply_blocked(*state),
+                Signal::Snapshot(snap) => app.apply_snapshot(*snap),
+                Signal::LoadFailed { scope, error } => app.load_failed(scope, &error),
+                Signal::Detail { scope, id, bead } => app.apply_detail(scope, id, bead.map(|b| *b)),
                 _ => {}
             }
         }
-        if app.take_blocked_stale() && repo {
-            watcher.refresh_blocked();
+        if app.take_reload_wanted() {
+            watcher.request_load(app.scope);
         }
-        if app.take_snapshot_wanted() && repo {
-            watcher.request_snapshot();
+        if let Some(id) = app.detail_wanted.take() {
+            watcher.request_show(app.scope, id);
         }
         if app.should_quit {
             break;

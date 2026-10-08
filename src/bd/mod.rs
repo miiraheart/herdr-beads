@@ -13,7 +13,13 @@ use crate::model::Scope;
 use anyhow::{bail, Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
+
+/// The longest any bd call may take before the board gives up on it, so a
+/// hung bd can never hang the board.
+const BD_TIMEOUT: Duration = Duration::from_secs(30);
 use types::Bead;
 
 fn resolve_bd() -> String {
@@ -45,13 +51,35 @@ pub(crate) fn command(scope: Scope) -> Command {
     cmd
 }
 
-/// Run a bd subcommand, returning stdout. Errors carry bd's stderr.
+/// Wait for a command's output, stopping it if it runs past `limit`.
+fn output_within(mut cmd: Command, limit: Duration) -> Result<std::process::Output> {
+    let child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let pid = child.id();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+    match rx.recv_timeout(limit) {
+        Ok(out) => Ok(out?),
+        Err(_) => {
+            let _ = Command::new("/bin/kill")
+                .args(["-KILL", &pid.to_string()])
+                .status();
+            bail!("timed out after {}s", limit.as_secs_f32())
+        }
+    }
+}
+
+/// Run a bd subcommand, returning stdout. Errors carry bd's stderr. A call
+/// that takes longer than `BD_TIMEOUT` is stopped and reported.
 pub fn run(scope: Scope, args: &[&str]) -> Result<String> {
     let mut cmd = command(scope);
     cmd.args(args);
-    let out = cmd
-        .output()
-        .with_context(|| format!("failed to spawn bd {}", args.join(" ")))?;
+    let out = output_within(cmd, BD_TIMEOUT).with_context(|| format!("bd {}", args.join(" ")))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         bail!("bd {}: {}", args.join(" "), err.trim());
@@ -69,21 +97,15 @@ pub fn parse_list(s: &str) -> Result<Vec<Bead>> {
 
 // ---------------------------------------------------------------- reads
 
-/// The full board: `bd list`, augmented with closed issues when asked (bd's
-/// default list omits some done states depending on config).
+/// The full board: `bd list`, with closed issues when asked. `--all` gets
+/// both in one call, so a failure is reported instead of half a board.
 pub fn load(scope: Scope, include_closed: bool) -> Result<Vec<Bead>> {
-    let mut beads = parse_list(&run(scope, &["list", "--json"])?)?;
-    if include_closed {
-        // Best-effort: merge in closed issues. Ignore if the flag is rejected.
-        if let Ok(s) = run(scope, &["list", "--status", "closed", "--json"]) {
-            if let Ok(extra) = parse_list(&s) {
-                let have: std::collections::HashSet<_> =
-                    beads.iter().map(|b| b.id.clone()).collect();
-                beads.extend(extra.into_iter().filter(|b| !have.contains(&b.id)));
-            }
-        }
-    }
-    Ok(beads)
+    let args: &[&str] = if include_closed {
+        &["list", "--json", "--all"]
+    } else {
+        &["list", "--json"]
+    };
+    parse_list(&run(scope, args)?)
 }
 
 pub fn show(scope: Scope, id: &str) -> Result<Option<Bead>> {
@@ -169,9 +191,22 @@ pub fn manifests() -> Vec<PathBuf> {
 }
 
 // ---------------------------------------------------------------- writes
+//
+// Free text (titles, notes, reasons, labels...) can start with `-`, which bd
+// would read as a flag. Flags are passed as `--name=value`, and note/comment
+// text after `--`, so any text reaches bd as data.
+
+fn flag(name: &str, value: &str) -> String {
+    format!("--{name}={value}")
+}
+
+fn run_args(scope: Scope, args: &[String]) -> Result<String> {
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    run(scope, &args)
+}
 
 pub fn set_status(scope: Scope, id: &str, status: &str) -> Result<()> {
-    run(scope, &["update", id, "-s", status]).map(|_| ())
+    run(scope, &["update", id, &flag("status", status)]).map(|_| ())
 }
 
 pub fn claim(scope: Scope, id: &str) -> Result<()> {
@@ -179,7 +214,7 @@ pub fn claim(scope: Scope, id: &str) -> Result<()> {
 }
 
 pub fn close(scope: Scope, id: &str, reason: &str) -> Result<()> {
-    run(scope, &["close", id, "-r", reason]).map(|_| ())
+    run(scope, &["close", id, &flag("reason", reason)]).map(|_| ())
 }
 
 pub fn set_priority(scope: Scope, id: &str, priority: u8) -> Result<()> {
@@ -188,13 +223,14 @@ pub fn set_priority(scope: Scope, id: &str, priority: u8) -> Result<()> {
 }
 
 pub fn add_note(scope: Scope, id: &str, note: &str) -> Result<()> {
-    run(scope, &["note", id, note]).map(|_| ())
+    run(scope, &["note", id, "--", note]).map(|_| ())
 }
 
 pub fn add_comment(scope: Scope, id: &str, text: &str) -> Result<()> {
-    run(scope, &["comment", id, text]).map(|_| ())
+    run(scope, &["comment", id, "--", text]).map(|_| ())
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewBead {
     pub title: String,
     pub issue_type: String,
@@ -206,82 +242,80 @@ pub struct NewBead {
     pub deferred: bool,
 }
 
-/// Create a bead from a fully-specified form; returns the new id.
-pub fn create(scope: Scope, nb: &NewBead) -> Result<String> {
-    let p = nb.priority.to_string();
+fn create_args(nb: &NewBead) -> Vec<String> {
     // --description is mandatory by convention; seed from title if blank.
     let desc = if nb.description.is_empty() {
         &nb.title
     } else {
         &nb.description
     };
-    let mut args: Vec<&str> = vec![
-        "create",
-        &nb.title,
-        "-t",
-        &nb.issue_type,
-        "-p",
-        &p,
-        "--description",
-        desc,
-        "--silent",
+    let mut args = vec![
+        "create".to_string(),
+        flag("title", &nb.title),
+        flag("type", &nb.issue_type),
+        flag("priority", &nb.priority.to_string()),
+        flag("description", desc),
+        "--silent".to_string(),
     ];
+    if nb.deferred {
+        args.push(flag("status", "deferred"));
+    }
     if !nb.assignee.is_empty() {
-        args.push("-a");
-        args.push(&nb.assignee);
+        args.push(flag("assignee", &nb.assignee));
     }
     if !nb.parent.is_empty() {
-        args.push("--parent");
-        args.push(&nb.parent);
+        args.push(flag("parent", &nb.parent));
     }
     if !nb.labels.is_empty() {
-        args.push("-l");
-        args.push(&nb.labels);
+        args.push(flag("labels", &nb.labels));
     }
-    let id = run(scope, &args)?.trim().to_string();
-    if nb.deferred && !id.is_empty() {
-        let _ = set_status(scope, &id, "deferred"); // best-effort → backlog
-    }
-    Ok(id)
+    args
 }
 
-/// Update an existing bead's core fields from an edited form. Optional fields
-/// (description/assignee/parent/labels) are only written when non-empty so an
-/// untouched field never wipes existing data. Status is left alone unless the
-/// backlog toggle is on.
-pub fn update_bead(scope: Scope, id: &str, nb: &NewBead) -> Result<()> {
-    let p = nb.priority.to_string();
-    let mut args: Vec<&str> = vec![
-        "update",
-        id,
-        "--title",
-        &nb.title,
-        "-t",
-        &nb.issue_type,
-        "-p",
-        &p,
-    ];
-    if !nb.description.is_empty() {
-        args.push("--description");
-        args.push(&nb.description);
+/// Create a bead from a fully-specified form; returns the new id. The
+/// backlog toggle sets its status in the same call.
+pub fn create(scope: Scope, nb: &NewBead) -> Result<String> {
+    Ok(run_args(scope, &create_args(nb))?.trim().to_string())
+}
+
+/// Arguments for an edit: only the fields that differ from `before`, the
+/// form as it was opened. An emptied field is sent empty, which clears it in
+/// bd; a field left alone is never sent, so it cannot wipe anything.
+fn update_args(id: &str, nb: &NewBead, before: &NewBead) -> Vec<String> {
+    let mut args = vec!["update".to_string(), id.to_string()];
+    let mut changed = |name: &str, now: &str, was: &str| {
+        if now != was {
+            args.push(flag(name, now));
+        }
+    };
+    changed("title", &nb.title, &before.title);
+    changed("type", &nb.issue_type, &before.issue_type);
+    changed(
+        "priority",
+        &nb.priority.to_string(),
+        &before.priority.to_string(),
+    );
+    changed("description", &nb.description, &before.description);
+    changed("assignee", &nb.assignee, &before.assignee);
+    changed("parent", &nb.parent, &before.parent);
+    changed("set-labels", &nb.labels, &before.labels);
+    if nb.deferred != before.deferred {
+        args.push(flag(
+            "status",
+            if nb.deferred { "deferred" } else { "open" },
+        ));
     }
-    if !nb.assignee.is_empty() {
-        args.push("-a");
-        args.push(&nb.assignee);
+    args
+}
+
+/// Save an edited bead (see `update_args`). Returns false when nothing
+/// changed, in which case bd is not called.
+pub fn update_bead(scope: Scope, id: &str, nb: &NewBead, before: &NewBead) -> Result<bool> {
+    let args = update_args(id, nb, before);
+    if args.len() == 2 {
+        return Ok(false);
     }
-    if !nb.parent.is_empty() {
-        args.push("--parent");
-        args.push(&nb.parent);
-    }
-    if !nb.labels.is_empty() {
-        args.push("--set-labels");
-        args.push(&nb.labels);
-    }
-    run(scope, &args)?;
-    if nb.deferred {
-        let _ = set_status(scope, id, "deferred");
-    }
-    Ok(())
+    run_args(scope, &args).map(|_| true)
 }
 
 #[cfg(test)]
@@ -333,6 +367,80 @@ mod tests {
         let b = parse_list(&format!("[{s}]")).unwrap().remove(0);
         assert_eq!(b.dependencies[0].other_id(), Some("sv-6sc"));
         assert_eq!(b.dependencies[0].dep_type.as_deref(), Some("blocks"));
+    }
+
+    fn dashed() -> NewBead {
+        NewBead {
+            title: "-starts with dash".into(),
+            issue_type: "task".into(),
+            priority: 2,
+            description: "-desc".into(),
+            assignee: "-bob".into(),
+            parent: String::new(),
+            labels: "-lab".into(),
+            deferred: false,
+        }
+    }
+
+    #[test]
+    fn text_starting_with_a_dash_is_passed_as_a_value() {
+        let create = create_args(&dashed());
+        assert!(create.contains(&"--title=-starts with dash".to_string()));
+        assert!(create.contains(&"--description=-desc".to_string()));
+        assert!(create.contains(&"--assignee=-bob".to_string()));
+        assert!(create.contains(&"--labels=-lab".to_string()));
+        // Every argument after the subcommand is a `--name=value` flag.
+        assert!(create[1..].iter().all(|a| a.starts_with("--")));
+        assert!(!create.contains(&"--status=deferred".to_string()));
+        let blank = NewBead {
+            title: String::new(),
+            description: String::new(),
+            assignee: String::new(),
+            labels: String::new(),
+            ..dashed()
+        };
+        let update = update_args("x-1", &dashed(), &blank);
+        assert!(update.contains(&"--title=-starts with dash".to_string()));
+        assert!(update.contains(&"--set-labels=-lab".to_string()));
+    }
+
+    #[test]
+    fn backlog_is_set_in_the_same_call() {
+        let nb = NewBead {
+            deferred: true,
+            ..dashed()
+        };
+        assert!(create_args(&nb).contains(&"--status=deferred".to_string()));
+        assert!(update_args("x-1", &nb, &dashed()).contains(&"--status=deferred".to_string()));
+        assert!(update_args("x-1", &dashed(), &nb).contains(&"--status=open".to_string()));
+    }
+
+    #[test]
+    fn edit_sends_only_changed_fields_and_clears_emptied_ones() {
+        let before = dashed();
+        let mut now = before.clone();
+        now.description = String::new();
+        now.priority = 0;
+        let args = update_args("x-1", &now, &before);
+        assert_eq!(
+            args,
+            vec!["update", "x-1", "--priority=0", "--description="]
+        );
+        assert_eq!(update_args("x-1", &before, &before), vec!["update", "x-1"]);
+    }
+
+    #[test]
+    fn a_hung_command_is_stopped_at_the_limit() {
+        let mut cmd = Command::new("sleep");
+        cmd.arg("5");
+        let started = std::time::Instant::now();
+        let err = output_within(cmd, Duration::from_millis(200)).unwrap_err();
+        assert!(err.to_string().contains("timed out"));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let mut ok = Command::new("echo");
+        ok.arg("hi");
+        let out = output_within(ok, Duration::from_secs(5)).unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hi");
     }
 
     #[test]

@@ -8,6 +8,9 @@ use crate::form::CreateForm;
 use crate::input::{Input, InputKind};
 use crate::model::{status_rank, Mode, Scope, SortKey, View, STATUS_ORDER};
 use crate::writer::Writer;
+
+/// The status line while a reload runs in the background.
+pub const LOADING: &str = "loading...";
 use ratatui::layout::Rect;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -52,14 +55,13 @@ pub struct App {
     pub status_msg: String,
     /// bd's events journal is being followed, so the board updates by itself.
     pub live: bool,
-    /// This workspace's `bd serve` base URL, when it runs one (server mode).
-    pub serve: Option<String>,
     /// Records applied recently, replayed on top of a background reload.
     pub recent: VecDeque<Record>,
-    /// Blocked state needs reloading (after a reload that did not include it).
-    pub blocked_stale: bool,
-    /// A record could not be applied; reload in full in the background.
-    pub snapshot_wanted: bool,
+    /// The board needs a full reload, done in the background.
+    pub reload_wanted: bool,
+    /// A bead whose `bd show` the detail pane is waiting for.
+    pub detail_wanted: Option<String>,
+    pub detail_loading: HashSet<String>,
     /// Runs bd writes in the background.
     pub writer: Writer,
     pub should_quit: bool,
@@ -90,10 +92,10 @@ impl App {
             viewport_rows: 20,
             status_msg: String::new(),
             live: false,
-            serve: None,
             recent: VecDeque::new(),
-            blocked_stale: false,
-            snapshot_wanted: false,
+            reload_wanted: false,
+            detail_wanted: None,
+            detail_loading: HashSet::new(),
             writer: Writer::start(),
             should_quit: false,
             hits: Hits::default(),
@@ -102,39 +104,24 @@ impl App {
         app
     }
 
+    /// The status line for a failed load.
+    pub(crate) fn load_error(scope: Scope, error: &str) -> String {
+        let first = error.lines().next().unwrap_or("");
+        if scope == Scope::Global && (first.contains("shared-server") || first.contains("--global"))
+        {
+            "global needs a shared-server bd DB (not configured) - g = repo".into()
+        } else {
+            format!("bd: {}", first.chars().take(90).collect::<String>())
+        }
+    }
+
     // ---------------------------------------------------------- data
 
+    /// Reload the board in the background (see `App::apply_snapshot`).
     pub fn reload(&mut self) {
-        let pos = self.selected_pos();
-        let loaded = match (&self.serve, self.scope) {
-            (Some(base), Scope::Repo) => bd::serve::list(base, self.show_closed),
-            _ => bd::load(self.scope, self.show_closed),
-        };
-        match loaded {
-            Ok(mut b) => {
-                // `bd list` has no blocked state: keep what we knew until the
-                // background refresh brings the current one.
-                self.carry_blocked(&mut b);
-                self.blocked_stale = true;
-                self.beads = b;
-                self.status_msg = self.count_msg();
-            }
-            Err(e) => {
-                let first = e.to_string().lines().next().unwrap_or("").to_string();
-                if self.scope == Scope::Global
-                    && (first.contains("shared-server") || first.contains("--global"))
-                {
-                    self.status_msg =
-                        "global needs a shared-server bd DB (not configured) - g = repo".into();
-                } else {
-                    self.status_msg = format!("bd: {}", first.chars().take(90).collect::<String>());
-                }
-                self.beads = Vec::new();
-            }
-        }
+        self.reload_wanted = true;
+        self.status_msg = LOADING.into();
         self.detail_cache.clear();
-        self.reselect_near(pos);
-        self.refresh_detail();
     }
 
     fn passes_filter(&self, b: &Bead) -> bool {
@@ -278,19 +265,15 @@ impl App {
         Some(b)
     }
 
+    /// Ask for the selected bead's `bd show` when the detail pane needs it;
+    /// it loads in the background and lands in `detail_cache`.
     pub(crate) fn refresh_detail(&mut self) {
         if !(self.show_detail || self.detail_modal) {
             return;
         }
         if let Some(id) = self.selected.clone() {
-            if !self.detail_cache.contains_key(&id) {
-                let shown = match (&self.serve, self.scope) {
-                    (Some(base), Scope::Repo) => bd::serve::show(base, &id),
-                    _ => bd::show(self.scope, &id),
-                };
-                if let Ok(Some(b)) = shown {
-                    self.detail_cache.insert(id, b);
-                }
+            if !self.detail_cache.contains_key(&id) && self.detail_loading.insert(id.clone()) {
+                self.detail_wanted = Some(id);
             }
         }
     }
@@ -424,10 +407,8 @@ impl App {
             match done.result {
                 Ok(msg) => {
                     self.status_msg = msg;
-                    if self.scope == Scope::Global {
-                        self.reload();
-                    } else if !self.live {
-                        self.snapshot_wanted = true;
+                    if self.scope == Scope::Global || !self.live {
+                        self.reload_wanted = true;
                     }
                 }
                 Err(e) => {
@@ -508,8 +489,7 @@ impl App {
     }
 
     /// Reopen the create form pre-filled from the selected bead to edit it.
-    /// Labels/parent aren't carried in the list JSON, so they start blank and
-    /// are only written back when set (an untouched field never wipes data).
+    /// Saving sends only the fields that changed (see `bd::update_bead`).
     pub fn open_edit_form(&mut self) {
         let Some(b) = self.selected_bead().cloned() else {
             return;
@@ -523,7 +503,13 @@ impl App {
         let mut f = CreateForm::new(epics);
         f.title = b.title.clone();
         f.description = b.description.clone();
-        f.assignee = b.owner.clone().unwrap_or_default();
+        f.assignee = b.assigned.clone().unwrap_or_default();
+        f.labels = b.labels.join(",");
+        f.epic_idx = b
+            .parent
+            .as_ref()
+            .and_then(|p| f.epics.iter().position(|(id, _)| id == p))
+            .map_or(0, |i| i + 1);
         f.type_idx = crate::form::TYPES
             .iter()
             .position(|t| *t == b.issue_type)
@@ -531,6 +517,7 @@ impl App {
         f.priority = b.priority.min(4);
         f.deferred = b.status == "deferred";
         f.edit_id = Some(b.id.clone());
+        f.before = Some(f.new_bead());
         self.create_form = Some(f);
     }
 
@@ -579,23 +566,14 @@ impl App {
         let Some(f) = self.create_form.take() else {
             return;
         };
-        let title = f.title.trim().to_string();
-        if title.is_empty() {
+        if f.title.trim().is_empty() {
             self.status_msg = "title required".into();
             self.create_form = Some(f);
             return;
         }
         let scope = self.scope;
-        let nb = bd::NewBead {
-            title,
-            issue_type: f.issue_type().to_string(),
-            priority: f.priority,
-            description: f.description.trim().to_string(),
-            assignee: f.assignee.trim().to_string(),
-            parent: f.parent_id().to_string(),
-            labels: f.labels.trim().to_string(),
-            deferred: f.deferred,
-        };
+        let nb = f.new_bead();
+        let before = f.before.clone();
         let pending = match &f.edit_id {
             Some(id) => format!("updating {id}..."),
             None => "creating...".to_string(),
@@ -603,9 +581,17 @@ impl App {
         let edit_id = f.edit_id.clone();
         self.status_msg = pending;
         self.writer.submit(
-            move || match edit_id {
-                Some(id) => bd::update_bead(scope, &id, &nb).map(|_| format!("updated {id}")),
-                None => bd::create(scope, &nb).map(|_| format!("created {}", nb.issue_type)),
+            move || match (edit_id, before) {
+                (Some(id), Some(before)) => {
+                    bd::update_bead(scope, &id, &nb, &before).map(|saved| {
+                        if saved {
+                            format!("updated {id}")
+                        } else {
+                            "no changes".to_string()
+                        }
+                    })
+                }
+                _ => bd::create(scope, &nb).map(|_| format!("created {}", nb.issue_type)),
             },
             Some(f),
         );
@@ -683,6 +669,9 @@ impl App {
 
     pub fn toggle_scope(&mut self) {
         self.scope = self.scope.toggled();
+        // The other scope's beads must not show under this one's label.
+        self.beads.clear();
+        self.detail_loading.clear();
         self.reload();
     }
 
