@@ -103,7 +103,7 @@ pub fn render_status_bar(f: &mut Frame, area: Rect, app: &App) {
     } else if app.mode == Mode::Popup {
         "q close board · K view · j/k move · c claim · x close · a new · / filter · ? help"
     } else {
-        "K view · j/k move · v move-mode · c claim · x close · a new · / filter · g scope · ? help · q quit"
+        "K view · j/k move · v move-mode · c claim · x close · a new · / filter · S scope · ? help · q quit"
     };
     let left = Span::styled(
         format!(" {} ", app.status_msg),
