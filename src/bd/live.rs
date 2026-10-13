@@ -381,7 +381,7 @@ impl Drop for Watcher {
 /// Stop a child: ask politely so `bd serve` and Dolt can shut down cleanly,
 /// then force it after a second.
 fn stop_child(mut child: Child) {
-    let _ = std::process::Command::new("/bin/kill")
+    let _ = std::process::Command::new("kill")
         .args(["-TERM", &child.id().to_string()])
         .stderr(Stdio::null())
         .status();
@@ -577,5 +577,25 @@ mod tests {
         assert_eq!(doc.as_deref().and_then(truncated_head), Some(24));
         assert!(j.push("note: the events journal is disabled").is_none());
         assert!(j.push(rec).is_some());
+    }
+
+    /// TERM first, so `bd serve` can shut Dolt down cleanly. The trap writes
+    /// the marker on TERM only; the KILL fallback would leave none.
+    #[test]
+    fn stop_child_asks_with_term_first() {
+        let marker = std::env::temp_dir().join(format!("hb-term-{}", std::process::id()));
+        std::fs::remove_file(&marker).ok();
+        let child = Command::new("sh")
+            .args([
+                "-c",
+                "trap 'touch \"$0\"; exit 0' TERM; while :; do sleep 0.1; done",
+            ])
+            .arg(&marker)
+            .spawn()
+            .unwrap();
+        thread::sleep(Duration::from_millis(200)); // until the trap is set
+        stop_child(child);
+        assert!(marker.exists(), "the child never saw TERM");
+        std::fs::remove_file(&marker).ok();
     }
 }

@@ -66,7 +66,7 @@ fn output_within(mut cmd: Command, limit: Duration) -> Result<std::process::Outp
     match rx.recv_timeout(limit) {
         Ok(out) => Ok(out?),
         Err(_) => {
-            let _ = Command::new("/bin/kill")
+            let _ = Command::new("kill")
                 .args(["-KILL", &pid.to_string()])
                 .status();
             bail!("timed out after {}s", limit.as_secs_f32())
@@ -431,12 +431,18 @@ mod tests {
 
     #[test]
     fn a_hung_command_is_stopped_at_the_limit() {
-        let mut cmd = Command::new("sleep");
-        cmd.arg("5");
+        // Stopped, not just abandoned: the marker appears only if the command
+        // is still running a second later.
+        let marker = std::env::temp_dir().join(format!("hb-hung-{}", std::process::id()));
+        std::fs::remove_file(&marker).ok();
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "sleep 1; touch \"$0\""]).arg(&marker);
         let started = std::time::Instant::now();
         let err = output_within(cmd, Duration::from_millis(200)).unwrap_err();
         assert!(err.to_string().contains("timed out"));
         assert!(started.elapsed() < Duration::from_secs(2));
+        std::thread::sleep(Duration::from_millis(1500));
+        assert!(!marker.exists(), "the command outlived its limit");
         let mut ok = Command::new("echo");
         ok.arg("hi");
         let out = output_within(ok, Duration::from_secs(5)).unwrap();
