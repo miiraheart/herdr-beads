@@ -90,7 +90,11 @@ impl App {
     }
 
     pub(crate) fn count_msg(&self) -> String {
-        format!("{} beads · {}", self.beads.len(), self.scope.label())
+        let count = format!("{} beads · {}", self.beads.len(), self.scope.label());
+        match &self.config_error {
+            Some(e) => format!("{count} · {e}"),
+            None => count,
+        }
     }
 
     fn remember(&mut self, rec: Record) {

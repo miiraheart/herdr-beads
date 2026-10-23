@@ -80,6 +80,12 @@ pub fn render_activity_bar(f: &mut Frame, area: Rect, app: &mut App) {
         right.push_str(&format!("  /{}", app.filter));
     }
     spans.push(Span::styled(right, Style::default().fg(theme::OVERLAY1)));
+    if app.config_error.is_some() {
+        spans.push(Span::styled(
+            "  config.toml error",
+            Style::default().fg(theme::RED),
+        ));
+    }
 
     if app.move_mode {
         spans.push(Span::styled(

@@ -11,20 +11,26 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
-pub fn bead_line(b: &Bead, width: u16) -> Line<'static> {
-    // Fixed prefix before the title: "  " (2) + "P0 " (3) + type+space (2)
-    // + "{id:<13} " (14) = 21 cols. Reserve the " ⛓N" suffix only when the
-    // bead actually carries deps (chain glyph renders 2 cells).
+/// Deeper beads indent no further, so a narrow dock keeps room for the title.
+const MAX_INDENT_DEPTH: usize = 4;
+
+/// `indent` is the extra columns before the row for its nesting depth.
+pub fn bead_line(b: &Bead, indent: usize, width: u16) -> Line<'static> {
+    // Fixed prefix before the title: "  " (2) + indent + "P0 " (3)
+    // + type+space (2) + "{id:<13} " (14) = 21 cols with no indent.
+    // Reserve the " ⛓N" suffix only when the bead actually carries deps
+    // (chain glyph renders 2 cells).
+    let lead = 2 + indent;
     let dep_w = if b.dependency_count > 0 {
         3 + b.dependency_count.to_string().len()
     } else {
         0
     };
     let title_w = (width as usize)
-        .saturating_sub(21 + dep_w + theme::blocked_width(b))
+        .saturating_sub(lead + 19 + dep_w + theme::blocked_width(b))
         .max(6);
     let mut spans = vec![
-        Span::raw("  "),
+        Span::raw(" ".repeat(lead)),
         Span::styled(
             format!("{} ", theme::priority_glyph(b.priority)),
             Style::default().fg(theme::priority_color(b.priority)),
@@ -58,7 +64,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
 
     for status in app.board_statuses() {
         let collapsed = app.collapsed.contains(&status);
-        let group_ids = app.ids_in(&status);
+        let group = app.tree_in(&status);
         let arrow = if collapsed { "▸" } else { "▾" };
         let color = theme::status_color(&status);
         lines.push(Line::from(vec![
@@ -68,7 +74,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
                 Style::default().fg(color).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!("({})", group_ids.len()),
+                format!("({})", group.len()),
                 Style::default().fg(theme::OVERLAY0),
             ),
         ]));
@@ -77,9 +83,13 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         if collapsed {
             continue;
         }
-        for id in group_ids {
+        for (id, depth) in group {
             if let Some(b) = app.beads.iter().find(|x| x.id == id) {
-                lines.push(bead_line(b, area.width));
+                lines.push(bead_line(
+                    b,
+                    depth.min(MAX_INDENT_DEPTH) * app.list_indent,
+                    area.width,
+                ));
                 ids.push(Some(id));
             }
         }

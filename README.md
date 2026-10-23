@@ -140,6 +140,12 @@ The plugin also exposes its actions in herdr's command palette: **Beads: toggle 
 ## Configuration
 
 - **Keybindings** live in `~/.config/herdr/config.toml` (see above).
+- **Settings file**: `config.toml` in the plugin config directory (`herdr plugin config-dir herdr-beads` prints the path). The board reads it on start. If the file has an error, the board uses the defaults, the activity bar shows `config.toml error`, and the status line shows the error with its line number.
+  - `list_indent` (`0` to `8`, default `0`): in the List view, put each child bead directly under its parent and indent it this many columns per nesting level, up to 4 levels. Kanban cards follow the same order without the indent. `0` sorts the flat list by priority, as before. A bead whose parent has a different status shows at the left margin.
+
+    ```toml
+    list_indent = 2
+    ```
 - **Auto-open the dock in new tabs** (off by default): press `A` in the board. The activity bar shows `+auto` while it is on, and a `tab.created` hook then opens the dock in each new tab, docked left and narrowed, without moving your focus out of the tab you are in. Press `A` again to stop. The setting lives in the plugin config directory, so it survives restarts and applies to the next tab with no reload. Only the dock does this: the floating board is a herdr popup, and a session has just one popup, not one per tab.
 - **Live updates** (bd 1.3+, off by default): run `bd config set events-journal true` in a repo and the board keeps itself current. Each change recorded in bd's events journal is applied as it arrives, using the bead state the record carries, so a change made outside the board shows up within a second or two, with no reload. The activity bar shows `+live` while the board is following.
   - **Embedded repos** (bd's default) follow `bd events tail --follow`. **Server-mode repos** get their own `bd serve` on a free loopback port; the board reads and follows events over HTTP and stops it on exit. Changes made from the board still go through the `bd` CLI, so repo hooks keep running.

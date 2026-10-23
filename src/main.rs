@@ -4,6 +4,7 @@
 mod app;
 mod app_live;
 mod bd;
+mod config;
 mod form;
 mod input;
 mod keys;
@@ -15,6 +16,7 @@ mod writer;
 
 use crate::app::App;
 use crate::bd::live::{Signal, Watcher};
+use crate::config::Config;
 use crate::model::{Mode, Scope};
 use anyhow::Result;
 use ratatui::backend::{Backend, CrosstermBackend};
@@ -139,7 +141,9 @@ fn main() -> Result<()> {
     )?;
     let mut terminal = Terminal::new(CrosstermBackend::new(out))?;
 
-    let res = run_app(&mut terminal, App::new(mode, scope));
+    let mut app = App::new(mode, scope);
+    app.apply_config(Config::load());
+    let res = run_app(&mut terminal, app);
 
     disable_raw_mode()?;
     execute!(

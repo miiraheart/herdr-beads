@@ -1,4 +1,5 @@
-//! Kanban: one column per status, cards sorted by priority. `v` then h/l retags
+//! Kanban: one column per status, cards in the list's order (by priority, and
+//! each child after its parent when `list_indent` is set). `v` then h/l retags
 //! a card to the adjacent column via `bd update --status`.
 
 use crate::app::App;
