@@ -11,6 +11,17 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
+/// One `Line` per source line. A `Span` holding `\n` renders as one run-on
+/// paragraph, so multi-line bead text has to be split before it reaches the
+/// `Paragraph`. `\r\n` and lone `\r` endings count as line breaks too.
+fn text_lines(text: &str, style: Style) -> Vec<Line<'static>> {
+    text.replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .lines()
+        .map(|l| Line::from(Span::styled(l.to_string(), style)))
+        .collect()
+}
+
 pub fn build_lines(b: &Bead) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
     lines.push(Line::from(Span::styled(
@@ -54,10 +65,10 @@ pub fn build_lines(b: &Bead) -> Vec<Line<'static>> {
             "Description",
             Style::default().fg(theme::YELLOW),
         )));
-        lines.push(Line::from(Span::styled(
-            b.description.clone(),
+        lines.extend(text_lines(
+            &b.description,
             Style::default().fg(theme::SUBTEXT),
-        )));
+        ));
         lines.push(Line::raw(""));
     }
     if b.is_blocked {
@@ -135,4 +146,43 @@ pub fn render_modal(f: &mut Frame, area: Rect, app: &App) {
             .wrap(Wrap { trim: false }),
         rect,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plain(lines: &[Line]) -> Vec<String> {
+        lines.iter().map(|l| l.to_string()).collect()
+    }
+
+    #[test]
+    fn text_lines_keeps_each_line_and_blank_lines() {
+        let got = text_lines("Intro\n\n- one\n- two", Style::default());
+        assert_eq!(plain(&got), ["Intro", "", "- one", "- two"]);
+    }
+
+    #[test]
+    fn text_lines_strips_crlf() {
+        let got = text_lines("a\r\n\r\nb\r\n", Style::default());
+        assert_eq!(plain(&got), ["a", "", "b"]);
+    }
+
+    #[test]
+    fn text_lines_splits_lone_cr() {
+        let got = text_lines("a\rb", Style::default());
+        assert_eq!(plain(&got), ["a", "b"]);
+    }
+
+    #[test]
+    fn no_line_holds_a_newline() {
+        let b: Bead = serde_json::from_str(
+            r#"{"id":"x-1","title":"t","description":"first\nsecond\r\nthird"}"#,
+        )
+        .unwrap();
+        let text = plain(&build_lines(&b));
+        assert!(text.iter().all(|l| !l.contains('\n') && !l.contains('\r')));
+        let at = text.iter().position(|l| l == "Description").unwrap();
+        assert_eq!(text[at + 1..at + 4], ["first", "second", "third"]);
+    }
 }
