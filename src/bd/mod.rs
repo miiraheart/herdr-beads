@@ -14,7 +14,7 @@ use anyhow::{bail, Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex};
 use std::time::Duration;
 
 /// The longest any bd call may take before the board gives up on it, so a
@@ -138,18 +138,57 @@ pub fn mark_blocked(beads: &mut [Bead], blocked: &HashMap<String, Vec<String>>) 
 
 // ---------------------------------------------------------------- workspace
 
-/// The workspace's `.beads` directory, found like bd finds it: `BEADS_DIR`,
-/// else the nearest `.beads` from the working directory up.
+/// How long `bd where` may take. It runs at startup, before the board draws.
+const WHERE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The `.beads` directory bd uses from `dir`, as `bd where` reports it. bd's
+/// lookup also follows redirects and git worktrees, whose `.beads` lives with
+/// the main repo or, for a bare repo, in the shared git dir: nowhere a walk up
+/// from `dir` reaches. None when bd finds no workspace there.
+pub fn workspace_at(dir: &Path) -> Option<PathBuf> {
+    let mut cmd = command(Scope::Repo);
+    cmd.args(["where", "--json"]).current_dir(dir);
+    let out = output_within(cmd, WHERE_TIMEOUT).ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    parse_where(&String::from_utf8_lossy(&out.stdout))
+}
+
+fn parse_where(s: &str) -> Option<PathBuf> {
+    let v: serde_json::Value = serde_json::from_str(s.trim()).ok()?;
+    v.get("path")?
+        .as_str()
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+}
+
+/// The workspace's `.beads` directory: `BEADS_DIR`, else bd's answer for the
+/// working directory, else the nearest `.beads` from it up (a bd too old for
+/// `bd where --json`). Cached per working directory, since the manifest
+/// watcher asks every second.
 fn beads_dir() -> Option<PathBuf> {
+    static CACHE: Mutex<Option<(PathBuf, Option<PathBuf>)>> = Mutex::new(None);
+
     if let Ok(dir) = std::env::var("BEADS_DIR") {
         if !dir.is_empty() {
             return Some(PathBuf::from(dir));
         }
     }
     let cwd = std::env::current_dir().ok()?;
-    cwd.ancestors()
-        .map(|d| d.join(".beads"))
-        .find(|d| d.is_dir())
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, found)) = cache.as_ref() {
+        if *at == cwd {
+            return found.clone();
+        }
+    }
+    let found = workspace_at(&cwd).or_else(|| {
+        cwd.ancestors()
+            .map(|d| d.join(".beads"))
+            .find(|d| d.is_dir())
+    });
+    *cache = Some((cwd, found.clone()));
+    found
 }
 
 /// The workspace's Dolt mode (`embedded`, `server` or `proxied-server`), read
@@ -441,6 +480,23 @@ mod tests {
         ok.arg("hi");
         let out = output_within(ok, Duration::from_secs(5)).unwrap();
         assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hi");
+    }
+
+    #[test]
+    fn where_reports_the_beads_dir() {
+        let s = r#"{
+  "database_path": "/src/proj/.bare/.beads/embeddeddolt",
+  "path": "/src/proj/.bare/.beads",
+  "prefix": "proj",
+  "schema_version": 1
+}"#;
+        assert_eq!(
+            parse_where(s),
+            Some(PathBuf::from("/src/proj/.bare/.beads"))
+        );
+        let none = r#"{"error": "no_beads_directory", "schema_version": 1}"#;
+        assert_eq!(parse_where(none), None);
+        assert_eq!(parse_where("not json"), None);
     }
 
     #[test]

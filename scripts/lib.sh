@@ -11,7 +11,8 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 HERDR_BIN="${HERDR_BIN_PATH:-herdr}"
 
 # cwd of the focused pane (the user's repo) - passed to the board via --env as a
-# hint; the binary also self-resolves, so this is belt-and-suspenders.
+# hint, which the board trusts. With no focused pane it prints nothing and the
+# board resolves the repo itself: the first listed pane may be in any workspace.
 focused_cwd() {
   "$HERDR_BIN" pane list 2>/dev/null | python3 -c '
 import json, sys
@@ -19,11 +20,10 @@ try:
     d = json.load(sys.stdin)
 except Exception:
     sys.exit(0)
-panes = (d.get("result") or {}).get("panes") or []
-focused = [p for p in panes if p.get("focused")]
-p = (focused or panes or [None])[0]
-if p:
-    print(p.get("cwd") or p.get("foreground_cwd") or "")
+for p in (d.get("result") or {}).get("panes") or []:
+    if p.get("focused"):
+        print(p.get("cwd") or p.get("foreground_cwd") or "")
+        break
 ' 2>/dev/null || true
 }
 

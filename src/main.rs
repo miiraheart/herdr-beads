@@ -72,43 +72,61 @@ fn resolve_repo_cwd() -> Option<String> {
     }
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
     let panes = v.get("result")?.get("panes")?.as_array()?;
+    pick_repo(panes, &me, &ws, |dir| {
+        bd::workspace_at(std::path::Path::new(dir)).is_some()
+    })
+}
 
-    let others: Vec<&serde_json::Value> = panes
-        .iter()
-        .filter(|p| p.get("pane_id").and_then(|x| x.as_str()).unwrap_or("") != me)
-        .collect();
-    let cwd = |p: &serde_json::Value| p.get("cwd").and_then(|x| x.as_str()).map(String::from);
-    let in_ws = |p: &serde_json::Value| {
-        !ws.is_empty() && p.get("workspace_id").and_then(|x| x.as_str()) == Some(ws.as_str())
-    };
+/// The pane cwd to scope to, from `herdr pane list`'s panes. Only panes in
+/// workspace `ws` are candidates, or the focused pane when `ws` is unknown: a
+/// project in another workspace is never the one the user means. Among those,
+/// a bd workspace wins, then the focused pane, then the first listed.
+/// `has_beads` is asked once per distinct directory.
+fn pick_repo(
+    panes: &[serde_json::Value],
+    me: &str,
+    ws: &str,
+    has_beads: impl Fn(&str) -> bool,
+) -> Option<String> {
+    fn field<'a>(p: &'a serde_json::Value, k: &str) -> &'a str {
+        p.get(k).and_then(|x| x.as_str()).unwrap_or("")
+    }
     let focused = |p: &serde_json::Value| p.get("focused").and_then(|x| x.as_bool()) == Some(true);
-    let has_beads = |c: &str| std::path::Path::new(c).join(".beads").exists();
 
-    // Preference order: a pane with a real .beads dir wins (focused first, my
-    // workspace next), then any focused pane, then anything.
-    let mut candidates: Vec<String> = Vec::new();
-    for p in &others {
-        if let Some(c) = cwd(p) {
-            let score = (has_beads(&c) as u8) * 4 + (focused(p) as u8) * 2 + (in_ws(p) as u8);
-            candidates.push(format!("{score:02}\u{1}{c}"));
+    let mut seen: std::collections::HashMap<&str, bool> = std::collections::HashMap::new();
+    let mut best: Option<((bool, bool), &str)> = None;
+    for p in panes {
+        let cwd = field(p, "cwd");
+        let ours = if ws.is_empty() {
+            focused(p)
+        } else {
+            field(p, "workspace_id") == ws
+        };
+        if cwd.is_empty() || field(p, "pane_id") == me || !ours {
+            continue;
+        }
+        let beads = *seen.entry(cwd).or_insert_with(|| has_beads(cwd));
+        let rank = (beads, focused(p));
+        if !matches!(best, Some((r, _)) if r >= rank) {
+            best = Some((rank, cwd));
         }
     }
-    candidates.sort();
-    candidates
-        .last()
-        .and_then(|s| s.split('\u{1}').nth(1))
-        .map(String::from)
+    best.map(|(_, cwd)| cwd.to_string())
 }
 
 fn apply_working_dir() {
-    // 1) explicit override from the launcher
+    // 1) the launcher's hint: the focused pane's directory. It is trusted even
+    //    when bd finds no workspace there, so the board says so rather than
+    //    showing some other project's beads.
     if let Ok(dir) = std::env::var("HERDR_BEADS_CWD") {
-        if !dir.is_empty() {
-            let _ = std::env::set_current_dir(&dir);
+        if !dir.is_empty() && std::env::set_current_dir(&dir).is_ok() {
+            return;
         }
     }
-    // 2) if still no .beads here, ask herdr for the workspace's repo
-    if !std::path::Path::new(".beads").exists() {
+    // 2) no hint: unless bd finds a workspace here, ask herdr for the
+    //    workspace's repo
+    let here = std::env::current_dir().ok();
+    if here.and_then(|d| bd::workspace_at(&d)).is_none() {
         if let Some(dir) = resolve_repo_cwd() {
             let _ = std::env::set_current_dir(&dir);
         }
@@ -193,4 +211,78 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_repo;
+    use serde_json::{json, Value};
+
+    fn pane(id: &str, ws: &str, cwd: &str, focused: bool) -> Value {
+        json!({"pane_id": id, "workspace_id": ws, "cwd": cwd, "focused": focused})
+    }
+
+    /// Two workspaces: ours (w2) holds a worktree whose `.beads` sits in the
+    /// shared git dir, plus a sibling repo; the next one (w3) holds another
+    /// project. Only the listed directories count as bd workspaces.
+    fn layout() -> Vec<Value> {
+        vec![
+            pane("w1:p1", "w1", "/code/aaa", false),
+            pane("w2:p1", "w2", "/code/sibling", false),
+            pane("w2:p2", "w2", "/code/proj/dev", true),
+            pane("w3:p1", "w3", "/code/zzz", false),
+        ]
+    }
+
+    fn beads_in(dirs: &'static [&'static str]) -> impl Fn(&str) -> bool {
+        move |d| dirs.contains(&d)
+    }
+
+    #[test]
+    fn never_picks_another_workspace() {
+        let panes = layout();
+        let all = beads_in(&["/code/aaa", "/code/sibling", "/code/zzz"]);
+        assert_eq!(
+            pick_repo(&panes, "w2:dock", "w2", &all).as_deref(),
+            Some("/code/sibling")
+        );
+        let none = beads_in(&["/code/aaa", "/code/zzz"]);
+        assert_eq!(
+            pick_repo(&panes, "w2:dock", "w2", &none).as_deref(),
+            Some("/code/proj/dev")
+        );
+    }
+
+    #[test]
+    fn a_focused_bd_workspace_beats_an_earlier_one() {
+        let panes = layout();
+        let both = beads_in(&["/code/sibling", "/code/proj/dev"]);
+        assert_eq!(
+            pick_repo(&panes, "w2:dock", "w2", &both).as_deref(),
+            Some("/code/proj/dev")
+        );
+    }
+
+    #[test]
+    fn unknown_workspace_follows_the_focused_pane() {
+        let panes = layout();
+        let others = beads_in(&["/code/aaa", "/code/sibling", "/code/zzz"]);
+        assert_eq!(
+            pick_repo(&panes, "", "", &others).as_deref(),
+            Some("/code/proj/dev")
+        );
+    }
+
+    #[test]
+    fn skips_itself_and_asks_once_per_directory() {
+        let mut panes = layout();
+        panes.push(pane("w2:p3", "w2", "/code/sibling", false));
+        let asked = std::cell::RefCell::new(Vec::new());
+        let pick = pick_repo(&panes, "w2:p2", "w2", |d: &str| {
+            asked.borrow_mut().push(d.to_string());
+            false
+        });
+        assert_eq!(pick.as_deref(), Some("/code/sibling"));
+        assert_eq!(*asked.borrow(), vec!["/code/sibling".to_string()]);
+    }
 }

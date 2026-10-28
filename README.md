@@ -122,7 +122,7 @@ The plugin also exposes its actions in herdr's command palette: **Beads: toggle 
 ## How it works
 
 - **bd bridge.** Every read (`bd list`, `bd ready`, `bd show`) and write (`bd update --status`, `--claim`, `bd close -r`, `bd priority`, `bd note`, `bd comment`, `bd create`) is a subprocess call built as an argv vector, never a shell string, so titles, notes, and reasons cannot be shell-injected. Writes are local; syncing (`bd dolt push`) stays your deliberate step.
-- **Repo resolution.** herdr runs the pane in the plugin's directory, so the binary asks herdr (`HERDR_WORKSPACE_ID` plus `herdr pane list`) for the focused pane's working directory and runs `bd` there. The board scopes to the project the window is on, with no configuration.
+- **Repo resolution.** herdr runs the pane in the plugin's directory, so the launcher passes the focused pane's working directory and the board runs `bd` there. The board scopes to the project the window is on, with no configuration. It finds the database the way `bd` does (`bd where`), so git worktrees work, including worktrees of a bare repo whose `.beads` lives in the shared git dir. If that directory has no beads, the board says so instead of showing another project's. Opened without a directory, it asks herdr (`HERDR_WORKSPACE_ID` plus `herdr pane list`) and picks from its own workspace's panes only.
 - **Columns are statuses.** The board's groups and columns are `bd`'s statuses (`open`, `in_progress`, `blocked`, `deferred`, `closed`, `pinned`, `hooked`, plus any custom ones). Closed is hidden until you press `C`.
 - **In-process views.** List, Table, and Kanban are three renderers over one selection, kept by bead id, so the selection survives view switches and reloads.
 
